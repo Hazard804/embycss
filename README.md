@@ -92,6 +92,14 @@
 // 在脚本中可以调整这些参数：
 this.showItemNum = 25;  // 显示的项目数量
 this.itemQuery.Limit = 200;  // 查询限制
+
+// 图片配置（统一管理图片尺寸相关参数）
+this.imageConfig = {
+    minWidth: 1500,           // 图片最小宽度验证标准（低于此值的图片会被过滤）
+    coverMaxWidth: 99999,     // 封面图片最大宽度（API请求参数）
+    logoMaxWidth: 500,        // Logo最大宽度（API请求参数）
+    backdropMaxWidth: 99999   // 背景图最大宽度（API请求参数）
+};
 ```
 
 ### extrafanart&trailers.js

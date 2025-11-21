@@ -36,9 +36,17 @@ class HomeSwiper {
 			EnableUserData: true, 
 			EnableTotalRecordCount: false 
 		};
-		this.backdropOptions = { type: "Backdrop", maxWidth: 99999, adjustForPixelRatio: false };
-		this.logoOptions = { type: "Logo", maxWidth: 500, adjustForPixelRatio: false };
-		this.coverOptions = { type: "Primary", maxWidth: 1000, adjustForPixelRatio: false };
+		// 图片配置
+		this.imageConfig = {
+			minWidth: 1500,           // 图片最小宽度验证标准
+			coverMaxWidth: 99999,      // 封面图片最大宽度
+			logoMaxWidth: 500,        // Logo最大宽度
+			backdropMaxWidth: 99999   // 背景图最大宽度
+		};
+		
+		this.backdropOptions = { type: "Backdrop", maxWidth: this.imageConfig.backdropMaxWidth, adjustForPixelRatio: false };
+		this.logoOptions = { type: "Logo", maxWidth: this.imageConfig.logoMaxWidth, adjustForPixelRatio: false };
+		this.coverOptions = { type: "Primary", maxWidth: this.imageConfig.coverMaxWidth, adjustForPixelRatio: false };
 		this.itemQuery.Limit = 200;
 		this.showItemNum = 25;
 		this.loadFlag = false;//是否已经加载
@@ -386,7 +394,7 @@ class HomeSwiper {
 		return new Promise((resolve) => {
 			const img = new Image();
 			img.onload = function() {
-				resolve({ width: this.naturalWidth, height: this.naturalHeight, valid: this.naturalWidth >= 1000 });
+				resolve({ width: this.naturalWidth, height: this.naturalHeight, valid: this.naturalWidth >= HomeSwiper.imageConfig.minWidth });
 			};
 			img.onerror = function() {
 				resolve({ width: 0, height: 0, valid: false });
