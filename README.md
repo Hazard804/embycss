@@ -69,6 +69,29 @@
 - 点击卡片跳转到对应详情页面
 - 左右滑动浏览更多内容
 
+### 3. DefaultMuteVolume.js - 默认静音播放
+
+自动将视频播放器的默认音量设置为 0（静音），避免突然的声音打扰。
+
+**主要功能：**
+- 🔇 自动将所有视频播放设置为静音（音量0）
+- 🎚️ 用户手动调整音量后，记住用户设置
+- 🎬 不影响预告片播放器的音量控制
+- ⚡ 多种检测机制确保设置生效
+- 🔄 支持页面路由切换后自动应用
+
+**特色：**
+- 智能排除预告片播放器（不干扰 extrafanart&trailers.js）
+- 使用 WeakMap 追踪用户音量偏好
+- 多层保护机制：DOM监听、play方法重写、定时检查
+- 尊重用户调整，一旦手动设置音量则不再强制静音
+
+**适用场景：**
+- 深夜浏览媒体库，不想打扰他人
+- 办公环境下使用 Emby
+- 喜欢默认静音，需要时再手动打开声音
+- 防止突然的高音量造成尴尬
+
 ## ️ 安装方法
 
 这两个脚本需要配合 [Emby.CustomCssJS](https://github.com/Shurelol/Emby.CustomCssJS) 程序使用。
@@ -83,11 +106,13 @@
    - 访问本仓库，复制所需脚本的完整代码
    - `HomeSwiper.js` - 首页轮播图功能
    - `extrafanart&trailers.js` - 剧照和预告片功能
+   - `DefaultMuteVolume.js` - 默认静音播放功能
 
 3. 在 Emby.CustomCssJS 中添加脚本
    - 打开 Emby.CustomCssJS 的管理界面
    - 将复制的脚本代码直接粘贴到自定义 JavaScript 区域
-   - 可以同时添加两个脚本，或根据需要选择其中一个
+   - 可以同时添加多个脚本，或根据需要选择其中一个或多个
+   - 推荐组合：`extrafanart&trailers.js` + `DefaultMuteVolume.js` 可完美配合使用
 
 4. 保存并刷新
    - 保存设置
@@ -157,6 +182,27 @@ this.cachedImages = new Map();        // 剧照数据缓存
 - ✅ 新增音量持久化功能
 - ✅ 优化缓存机制，提升页面切换体验
 
+### DefaultMuteVolume.js
+
+安装后，所有视频播放时会自动设置为静音（音量0）。
+
+**使用说明：**
+- 脚本会在视频开始播放时自动将音量设为 0
+- 如果您手动调整了音量，脚本会记住您的设置，不再强制静音
+- 预告片播放器不受影响，可以正常控制音量
+- 刷新页面后重新应用静音设置
+
+**工作原理：**
+1. 监听 DOM 变化，捕获新出现的 video 元素
+2. 重写 HTMLMediaElement 的 play 方法
+3. 定时检查确保设置生效
+4. 使用 WeakMap 追踪用户手动调整的音量
+
+**注意事项：**
+- 只影响正常播放的视频，不影响预告片容器
+- 一旦手动调整音量，该视频元素将保持您的设置
+- 与 extrafanart&trailers.js 完美兼容
+
 ## 🙏 鸣谢
 
 - **轮播图脚本** 源自 [Nolovenodie/emby-crx](https://github.com/Nolovenodie/emby-crx) 项目
@@ -184,6 +230,8 @@ this.cachedImages = new Map();        // 剧照数据缓存
 4. 脚本需要通过 Emby.CustomCssJS 加载才能生效
 5. **悬停预告片功能仅在非触摸设备上启用**（桌面端浏览器）
 6. 音量设置会保存在浏览器本地存储中，下次访问时自动恢复
+7. **DefaultMuteVolume.js 会将所有视频默认静音**，如需声音请手动调整音量滑块
+8. DefaultMuteVolume.js 与 extrafanart&trailers.js 完全兼容，不会互相干扰
 
 ## 🐛 问题反馈
 
