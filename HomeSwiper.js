@@ -22,6 +22,13 @@ class CommonUtils {
 }
 class HomeSwiper {
 	static start() {
+		// ===== 配置选项 =====
+		// 指定要从哪些媒体库获取内容（填写媒体库的 ID）
+		// 留空数组 [] 表示从所有启用的媒体库获取
+		// 示例：['library-id-1', 'library-id-2'] 表示从这两个媒体库各随机获取一半内容
+		this.targetLibraryIds = [];
+		// ===================
+		
         CommonUtils.cleanCacheEveryDay();
 
 		this.itemQuery = { 
@@ -393,101 +400,269 @@ class HomeSwiper {
 	static async checkImageSize(imageUrl) {
 		return new Promise((resolve) => {
 			const img = new Image();
+			let resolved = false;
+			
+			const resolveOnce = (result) => {
+				if (!resolved) {
+					resolved = true;
+					resolve(result);
+				}
+			};
+			
 			img.onload = function() {
-				resolve({ width: this.naturalWidth, height: this.naturalHeight, valid: this.naturalWidth >= HomeSwiper.imageConfig.minWidth });
+				resolveOnce({ width: this.naturalWidth, height: this.naturalHeight, valid: this.naturalWidth >= HomeSwiper.imageConfig.minWidth });
 			};
-			img.onerror = function() {
-				resolve({ width: 0, height: 0, valid: false });
+			img.onerror = function(error) {
+				console.warn(`[HomeSwiper] 图片加载失败：${imageUrl}`, error);
+				resolveOnce({ width: 0, height: 0, valid: false });
 			};
+			
 			// 设置超时，避免长时间等待
-			setTimeout(() => {
+			const timeout = setTimeout(() => {
 				if (!img.complete) {
-					resolve({ width: 0, height: 0, valid: false });
+					console.warn(`[HomeSwiper] 图片加载超时：${imageUrl}`);
+					resolveOnce({ width: 0, height: 0, valid: false });
 				}
 			}, 5000);
-			img.src = imageUrl;
+			
+			try {
+				img.src = imageUrl;
+			} catch (error) {
+				console.error(`[HomeSwiper错误] 设置图片src失败：`, error);
+				clearTimeout(timeout);
+				resolveOnce({ width: 0, height: 0, valid: false });
+			}
 		});
 	}
 	static async getLibItems(refreshFlag) {
 		if (refreshFlag || !localStorage.getItem("CACHE|getLibItems" + ApiClient.getCurrentUserId() + "-" + ApiClient.serverId())) {
 			this.cacheRefreshFlag = false;
-			let libdata = await ApiClient.getUserViews({}, ApiClient.getCurrentUserId());
-			let libdataitem = this.user.Policy.EnableAllFolders ? libdata.Items : libdata.Items.filter(m => this.user.Policy.EnabledFolders.includes(m.Guid));
-			let Alldata = [];
-
-			// ====== 使用Emby的SortBy=Random直接从媒体库随机获取，并验证图片尺寸 ======
-			const validItems = [];
-			const batchSize = 30; // 每批获取30个，增加获取数量以提高效率
-			const maxAttempts = 5; // 最多尝试5批，避免无限循环
-			let attempts = 0;
-			
-			while (validItems.length < this.showItemNum && attempts < maxAttempts) {
-				attempts++;
-				
-				// 每次获取一批随机项目
-				this.itemQuery.Limit = batchSize;
-				const result = await this.getItems(this.itemQuery);
-				const items = result?.Items || [];
-				
-				if (items.length === 0) break;
-				
-				// 并行检查所有图片尺寸
-				const checkPromises = items.map(async (item) => {
-					const imageUrl = await this.getImageUrl(item, this.backdropOptions);
-					if (!imageUrl) return null;
-					
-					const sizeInfo = await this.checkImageSize(imageUrl);
-					if (sizeInfo.valid) {
-						return item;
-					}
-					return null;
-				});
-				
-				const results = await Promise.all(checkPromises);
-				const validBatch = results.filter(item => item !== null);
-				
-				// 添加有效的项目
-				for (const item of validBatch) {
-					if (validItems.length < this.showItemNum) {
-						validItems.push(item);
-					} else {
-						break;
-					}
-				}
-				
-				// 清除缓存以便下次获取新的随机结果
-				sessionStorage.removeItem("CACHE|getItems" + ApiClient.getCurrentUserId() + "-" + ApiClient.serverId());
+			console.log("[HomeSwiper] 开始获取媒体库数据");
+			let libdata;
+			try {
+				libdata = await ApiClient.getUserViews({}, ApiClient.getCurrentUserId());
+				console.log("[HomeSwiper] 成功获取媒体库列表，数量：", libdata?.Items?.length || 0);
+			} catch (error) {
+				console.error("[HomeSwiper错误] 获取媒体库失败：", error);
+				console.error("[HomeSwiper错误] 错误详情：", error.message);
+				return [];
 			}
 			
-			console.log(`图片尺寸验证完成: 获取了 ${validItems.length} 个符合条件的项目 (目标: ${this.showItemNum})`);
+			if (!libdata || !libdata.Items || libdata.Items.length === 0) {
+				console.error("[HomeSwiper错误] 媒体库数据为空");
+				return [];
+			}
 			
-			// 使用验证通过的项目
-			validItems.length !== 0 && Alldata.push({ data: validItems, Id: 0 });
+			let libdataitem = this.user.Policy.EnableAllFolders ? libdata.Items : libdata.Items.filter(m => this.user.Policy.EnabledFolders.includes(m.Guid));
+			console.log("[HomeSwiper] 启用的媒体库数量：", libdataitem.length);
+			let Alldata = [];
 
-			// for (let i = 0; i < libdataitem.length; ++i) {
-			// 	let libitem = libdataitem[i];
-			// 	if (libitem.CollectionType && libitem.CollectionType === "homevideos") {
-			// 		this.itemQuery.ImageTypes = "Primary";
-			// 	} else {
-			// 		this.itemQuery.ImageTypes = "Backdrop";
-			// 	}
-			// 	this.itemQuery.ParentId = libitem.Id;
-			// 	let dataquery = await this.getItems(this.itemQuery);
-			// 	if (dataquery.Items.length === 0) {
-			// 		/* 查询结果为空的媒体库，随机全库。如果不需要，就注释掉下方一条语句。*/
-			// 		// dataquery = await this.getItems({
-			// 		// 	ImageTypes: "Backdrop", EnableImageTypes: "Primary,Backdrop,Banner,Logo",
-			// 		// 	IncludeItemTypes: "Movie,Series", SortBy: "Random",
-			// 		// 	Recursive: true, ImageTypeLimit: 1, Limit: this.itemQuery.Limit, Fields: "Taglines,Overview",
-			// 		// 	EnableUserData: true, EnableTotalRecordCount: false
-			// 		// });
-			// 	}
-			// 	dataquery.Items.length > this.showItemNum && (dataquery.Items = this.getRandomArrayElements(dataquery.Items, this.showItemNum));
-			// 	// dataquery.Items.length !== 0 &&
-			// 	// 	Alldata.push({ Id: libitem.Id, Name: libitem.Name, ImageTags: libitem.ImageTags, CollectionType: libitem.CollectionType, data: dataquery.Items });
-			// 	dataquery.Items.length !== 0 &&
-			// 	    Alldata.push({ Id: libitem.Id, data: dataquery.Items });
-			// }
+			// ===== 判断是否指定了媒体库ID =====
+			if (this.targetLibraryIds && this.targetLibraryIds.length > 0) {
+				// 用户指定了媒体库ID，使用新逻辑：从指定媒体库分别获取并混合
+				console.log("[HomeSwiper] 检测到指定媒体库ID，使用分库获取模式");
+				
+				let targetLibraries = libdataitem.filter(lib => this.targetLibraryIds.includes(lib.Id) || this.targetLibraryIds.includes(lib.Guid));
+				if (targetLibraries.length === 0) {
+					console.warn("[HomeSwiper警告] 指定的媒体库ID未找到，将回退到原始逻辑");
+					targetLibraries = null; // 回退标记
+				} else {
+					console.log(`[HomeSwiper] 使用指定的 ${targetLibraries.length} 个媒体库:`, targetLibraries.map(lib => lib.Name));
+				}
+				
+				if (targetLibraries && targetLibraries.length > 0) {
+					// ====== 从指定的媒体库中分别随机获取，并验证图片尺寸 ======
+					const validItems = [];
+					const batchSize = 30;
+					const maxAttempts = 5;
+					
+					// 计算每个媒体库应该获取的数量
+					const itemsPerLibrary = Math.ceil(this.showItemNum / targetLibraries.length);
+					console.log(`[HomeSwiper] 目标总数：${this.showItemNum}，媒体库数量：${targetLibraries.length}，每个媒体库获取：${itemsPerLibrary} 个`);
+					
+					// 从每个媒体库分别获取
+					for (let libIndex = 0; libIndex < targetLibraries.length; libIndex++) {
+						const library = targetLibraries[libIndex];
+						console.log(`[HomeSwiper] 开始从媒体库 "${library.Name}" (${library.Id}) 获取内容...`);
+						
+						const libraryValidItems = [];
+						let attempts = 0;
+						
+						// 为当前媒体库设置 ParentId
+						const libraryQuery = { ...this.itemQuery, ParentId: library.Id };
+						
+						while (libraryValidItems.length < itemsPerLibrary && attempts < maxAttempts) {
+							attempts++;
+							console.log(`[HomeSwiper] 媒体库 "${library.Name}" - 第 ${attempts} 次尝试获取项目...`);
+							
+							libraryQuery.Limit = batchSize;
+							let result;
+							try {
+								result = await Promise.race([
+									this.getItems(libraryQuery),
+									new Promise((_, reject) => setTimeout(() => reject(new Error('API请求超时')), 15000))
+								]);
+							} catch (error) {
+								console.error(`[HomeSwiper错误] 媒体库 "${library.Name}" 第 ${attempts} 次获取项目失败：`, error.message);
+								if (attempts < maxAttempts) {
+									console.log(`[HomeSwiper] 等待2秒后重试...`);
+									await new Promise(r => setTimeout(r, 2000));
+									continue;
+								}
+								break;
+							}
+							
+							const items = result?.Items || [];
+							console.log(`[HomeSwiper] 媒体库 "${library.Name}" - 第 ${attempts} 次获取到 ${items.length} 个项目`);
+							
+							if (items.length === 0) {
+								console.warn(`[HomeSwiper警告] 媒体库 "${library.Name}" - 第 ${attempts} 次获取项目为空`);
+								break;
+							}
+							
+							// 并行检查所有图片尺寸
+							const checkPromises = items.map(async (item, index) => {
+								try {
+									const imageUrl = await this.getImageUrl(item, this.backdropOptions);
+									if (!imageUrl) {
+										console.warn(`[HomeSwiper] 项目 ${item.Name} 没有背景图`);
+										return null;
+									}
+									
+									const sizeInfo = await this.checkImageSize(imageUrl);
+									if (sizeInfo.valid) {
+										console.log(`[HomeSwiper] ✓ ${item.Name} - 图片尺寸：${sizeInfo.width}x${sizeInfo.height}`);
+										return item;
+									} else {
+										console.log(`[HomeSwiper] ✗ ${item.Name} - 图片尺寸不符（${sizeInfo.width}x${sizeInfo.height}，需要≥${this.imageConfig.minWidth}）`);
+									}
+									return null;
+								} catch (error) {
+									console.error(`[HomeSwiper错误] 检查项目 ${item.Name} 时出错：`, error.message);
+									return null;
+								}
+							});
+							
+							const results = await Promise.all(checkPromises);
+							const validBatch = results.filter(item => item !== null);
+							
+							// 添加有效的项目
+							for (const item of validBatch) {
+								if (libraryValidItems.length < itemsPerLibrary) {
+									libraryValidItems.push(item);
+								} else {
+									break;
+								}
+							}
+							
+							// 清除缓存以便下次获取新的随机结果
+							sessionStorage.removeItem("CACHE|getItems" + (libraryQuery.ParentId ? libraryQuery.ParentId : '') + ApiClient.getCurrentUserId() + "-" + ApiClient.serverId());
+						}
+						
+						console.log(`[HomeSwiper] 媒体库 "${library.Name}" 图片尺寸验证完成: 获取了 ${libraryValidItems.length} 个符合条件的项目 (目标: ${itemsPerLibrary})`);
+						
+						// 将当前媒体库的有效项目添加到总列表
+						validItems.push(...libraryValidItems);
+					}
+					
+					// 混合所有媒体库的结果
+					console.log(`[HomeSwiper] 所有媒体库获取完成，共 ${validItems.length} 个项目，开始混合...`);
+					const shuffledItems = this.shuffleArray(validItems);
+					
+					// 限制到目标数量
+					const finalItems = shuffledItems.slice(0, this.showItemNum);
+					console.log(`[HomeSwiper] 混合完成，最终使用 ${finalItems.length} 个项目`);
+					
+					// 使用验证通过的项目
+					finalItems.length !== 0 && Alldata.push({ data: finalItems, Id: 0 });
+				}
+			}
+			
+			// 未指定媒体库ID或指定的ID无效，使用原始逻辑：从所有启用的媒体库随机获取
+			if (Alldata.length === 0) {
+				console.log("[HomeSwiper] 使用原始逻辑：从所有启用的媒体库随机获取");
+				
+				const validItems = [];
+				const batchSize = 30;
+				const maxAttempts = 5;
+				let attempts = 0;
+				
+				console.log(`[HomeSwiper] 开始获取随机项目，目标数量：${this.showItemNum}`);
+				
+				while (validItems.length < this.showItemNum && attempts < maxAttempts) {
+					attempts++;
+					console.log(`[HomeSwiper] 第 ${attempts} 次尝试获取项目...`);
+					
+					// 每次获取一批随机项目（不指定ParentId，从所有库获取）
+					this.itemQuery.Limit = batchSize;
+					let result;
+					try {
+						result = await Promise.race([
+							this.getItems(this.itemQuery),
+							new Promise((_, reject) => setTimeout(() => reject(new Error('API请求超时')), 15000))
+						]);
+					} catch (error) {
+						console.error(`[HomeSwiper错误] 第 ${attempts} 次获取项目失败：`, error.message);
+						if (attempts < maxAttempts) {
+							console.log(`[HomeSwiper] 等待2秒后重试...`);
+							await new Promise(r => setTimeout(r, 2000));
+							continue;
+						}
+						break;
+					}
+					
+					const items = result?.Items || [];
+					console.log(`[HomeSwiper] 第 ${attempts} 次获取到 ${items.length} 个项目`);
+					
+					if (items.length === 0) {
+						console.warn(`[HomeSwiper警告] 第 ${attempts} 次获取项目为空`);
+						break;
+					}
+					
+					// 并行检查所有图片尺寸
+					const checkPromises = items.map(async (item, index) => {
+						try {
+							const imageUrl = await this.getImageUrl(item, this.backdropOptions);
+							if (!imageUrl) {
+								console.warn(`[HomeSwiper] 项目 ${item.Name} 没有背景图`);
+								return null;
+							}
+							
+							const sizeInfo = await this.checkImageSize(imageUrl);
+							if (sizeInfo.valid) {
+								console.log(`[HomeSwiper] ✓ ${item.Name} - 图片尺寸：${sizeInfo.width}x${sizeInfo.height}`);
+								return item;
+							} else {
+								console.log(`[HomeSwiper] ✗ ${item.Name} - 图片尺寸不符（${sizeInfo.width}x${sizeInfo.height}，需要≥${this.imageConfig.minWidth}）`);
+							}
+							return null;
+						} catch (error) {
+							console.error(`[HomeSwiper错误] 检查项目 ${item.Name} 时出错：`, error.message);
+							return null;
+						}
+					});
+					
+					const results = await Promise.all(checkPromises);
+					const validBatch = results.filter(item => item !== null);
+					
+					// 添加有效的项目
+					for (const item of validBatch) {
+						if (validItems.length < this.showItemNum) {
+							validItems.push(item);
+						} else {
+							break;
+						}
+					}
+					
+					// 清除缓存以便下次获取新的随机结果
+					sessionStorage.removeItem("CACHE|getItems" + ApiClient.getCurrentUserId() + "-" + ApiClient.serverId());
+				}
+				
+				console.log(`[HomeSwiper] 图片尺寸验证完成: 获取了 ${validItems.length} 个符合条件的项目 (目标: ${this.showItemNum})`);
+				
+				// 使用验证通过的项目
+				validItems.length !== 0 && Alldata.push({ data: validItems, Id: 0 });
+			}
 
 			const data = JSON.stringify(Alldata);
 			localStorage.setItem("CACHE|getLibItems" + ApiClient.getCurrentUserId() + "-" + ApiClient.serverId(), data);
@@ -503,6 +678,17 @@ class HomeSwiper {
 		}
 		return JSON.parse(localStorage.getItem("CACHE|getLibItems" + ApiClient.getCurrentUserId() + "-" + ApiClient.serverId()));
 	}
+	
+	// 新增：洗牌算法（Fisher-Yates）
+	static shuffleArray(array) {
+		const shuffled = [...array];
+		for (let i = shuffled.length - 1; i > 0; i--) {
+			const j = Math.floor(Math.random() * (i + 1));
+			[shuffled[i], shuffled[j]] = [shuffled[j], shuffled[i]];
+		}
+		return shuffled;
+	}
+	
 	static getImageUrl(item, options) {
 		var imgUrl, width = options.maxWidth, imageTags = item.ImageTags, adjustForPixelRatio = options.adjustForPixelRatio;
 		return options.type == "Thumb" && imageTags && imageTags.Thumb ? (imgUrl = ApiClient.getImageUrl(item.Id, {
@@ -569,13 +755,22 @@ class HomeSwiper {
 			</div>`;
 
 		// 获取数据（使用缓存逻辑的 getLibItems）
-		// 如果外部已在其它地方设置 this.Alldata，getLibItems(false) 会读取缓存；首次加载会拉取
-		this.Alldata = await this.getLibItems(false);
+		console.log("[HomeSwiper] initBanner - 开始获取数据");
+		try {
+			this.Alldata = await this.getLibItems(false);
+		} catch (error) {
+			console.error("[HomeSwiper错误] initBanner - 获取数据失败：", error);
+			console.error("[HomeSwiper错误] 错误堆栈：", error.stack);
+			return null;
+		}
 
 		// 若无数据则返回 null（原逻辑一致）
 		if (!this.Alldata || this.Alldata.length == 0) {
-			return;
+			console.warn("[HomeSwiper警告] initBanner - 没有可用数据");
+			return null;
 		}
+		
+		console.log(`[HomeSwiper] initBanner - 成功获取 ${this.Alldata.length} 组数据`);
 
 		// 构建主轮播与缩略封面 HTML
 		const html = { Swiper: "", coverHtml: "" };
@@ -587,10 +782,19 @@ class HomeSwiper {
 			for (let j = 0; j < datas.data.length; ++j) {
 				let detail = datas.data[j];
 				let ImageUrl;
-				if (datas.CollectionType === "homevideos") {
-					ImageUrl = await this.getImageUrl(detail, this.coverOptions);
-				} else {
-					ImageUrl = await this.getImageUrl(detail, this.backdropOptions);
+				try {
+					if (datas.CollectionType === "homevideos") {
+						ImageUrl = await this.getImageUrl(detail, this.coverOptions);
+					} else {
+						ImageUrl = await this.getImageUrl(detail, this.backdropOptions);
+					}
+					if (!ImageUrl) {
+						console.warn(`[HomeSwiper警告] 项目 ${detail.Name} 没有可用图片`);
+						continue;
+					}
+				} catch (error) {
+					console.error(`[HomeSwiper错误] 获取项目 ${detail.Name} 图片URL失败：`, error);
+					continue;
 				}
 
 				const backdropHtml = `

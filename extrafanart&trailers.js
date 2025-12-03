@@ -1,5 +1,10 @@
 class ExtraFanart {
 	static start() {
+		// ===== 配置选项 =====
+		// 是否启用网络链接容器显示功能（true=显示，false=隐藏）
+		this.enableWebLinks = true;
+		// ===================
+		
 		this.startImageIndex = parseInt(localStorage.getItem('extraFanartStartIndex')) || 2;
 		this.endImageIndex = 0;
 		this.currentZoomedImageIndex = -1;
@@ -1626,17 +1631,17 @@ static isDetailsPage() {
 				usesBrackets = false;
 				console.log('[ExtraFanart] 从第一个空格前提取到番号:', code);
 			} else {
-				// 如果没有空格，使用整个标题
-				code = titleText;
-				codeStartIndex = 0;
-				codeEndIndex = titleText.length;
-				usesBrackets = false;
-				console.log('[ExtraFanart] 使用整个标题作为番号:', code);
+				// 如果没有空格，也没有方括号，说明无法提取番号
+				console.log('[ExtraFanart] 无法提取番号，标题格式不符合要求');
+				return;
 			}
 		}
 		
-		if (!code) return;			// 生成网络链接（新增功能）
-			const webLinks = this.createWebLinks(code, item);
+		if (!code) return;			// 生成网络链接（仅在启用时）
+			let webLinks = [];
+			if (this.enableWebLinks) {
+				webLinks = this.createWebLinks(code, item);
+			}
 			
 		// 再次检查是否还在详情页（异步加载期间用户可能离开）
 		if (!this.isDetailsPage()) {
@@ -1698,8 +1703,10 @@ static isDetailsPage() {
 		
 		if (afterCode) {
 			titleElement.appendChild(document.createTextNode(afterCode));
-		}			// 插入网络链接到标题下方
-			this.insertWebLinks(titleElement, webLinks);
+		}			// 插入网络链接到标题下方（仅在启用且有链接时）
+			if (this.enableWebLinks && webLinks.length > 0) {
+				this.insertWebLinks(titleElement, webLinks);
+			}
 			
 		} catch (error) {
 			console.error('[ExtraFanart] 番号提取失败:', error);
@@ -1756,14 +1763,17 @@ static isDetailsPage() {
 	if (existingCode && existingCode.textContent === cachedCodeInfo.code) {
 		console.log('[ExtraFanart] 番号元素已显示在标题中，检查网络链接');
 		
-		// 检查网络链接是否已存在
-		const existingLinksContainer = titleElement.parentElement.querySelector('.jv-web-links-container');
-		if (existingLinksContainer) {
-			console.log('[ExtraFanart] 网络链接已存在，跳过重新渲染');
-			return;
-		} else if (cachedCodeInfo.webLinks && cachedCodeInfo.webLinks.length > 0) {
-			console.log('[ExtraFanart] 番号存在但缺少网络链接，添加链接');
-			this.insertWebLinks(titleElement, cachedCodeInfo.webLinks);
+		// 只有在启用网络链接时才检查和添加
+		if (this.enableWebLinks && cachedCodeInfo.webLinks && cachedCodeInfo.webLinks.length > 0) {
+			// 检查网络链接是否已存在
+			const existingLinksContainer = titleElement.parentElement.querySelector('.jv-web-links-container');
+			if (existingLinksContainer) {
+				console.log('[ExtraFanart] 网络链接已存在，跳过重新渲染');
+				return;
+			} else {
+				console.log('[ExtraFanart] 番号存在但缺少网络链接，添加链接');
+				this.insertWebLinks(titleElement, cachedCodeInfo.webLinks);
+			}
 		}
 		return;
 	}
@@ -1852,8 +1862,8 @@ static isDetailsPage() {
 			titleElement.appendChild(document.createTextNode(afterCode));
 		}
 		
-		// 插入网络链接
-		if (webLinks && webLinks.length > 0) {
+		// 插入网络链接（仅在启用且有链接时）
+		if (this.enableWebLinks && webLinks && webLinks.length > 0) {
 			this.insertWebLinks(titleElement, webLinks);
 		}
 	}
@@ -2033,6 +2043,7 @@ static isDetailsPage() {
 	// 插入网络链接到页面
 	static insertWebLinks(titleElement, webLinks) {
 		if (!webLinks || webLinks.length === 0) return;
+		if (!this.enableWebLinks) return; // 如果未启用，直接返回
 		
 		// 在整个详情页范围内查找链接容器，避免重复创建
 		const detailPage = document.querySelector('#itemDetailPage:not(.hide), .itemView:not(.hide)');
