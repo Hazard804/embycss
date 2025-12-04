@@ -513,7 +513,7 @@ static isDetailsPage() {
 			this.showContainer(this.endImageIndex);
 		}
 		
-		// 延迟恢复相似影片和演员作品，确保剧照容器先稳定
+		// 延迟恢复相似影片、演员作品和番号，确保剧照容器先稳定
 		setTimeout(() => {
 			// 再次检查 itemId，确保没有切换到其他页面
 			if (this.itemId !== currentItemId) return;
@@ -530,9 +530,10 @@ static isDetailsPage() {
 				return;
 			}
 			
-			// 检查并恢复相似影片和演员作品容器（如果有缓存且不在DOM中）
+			// 检查并恢复相似影片、演员作品和番号容器（如果有缓存且不在DOM中）
 			const hasSimilarCache = this.cachedSimilarItems.has(currentItemId);
 			const hasActorCache = this.cachedActorItems.has(currentItemId);
+			const hasCodeCache = this.cachedCodes.has(currentItemId);
 			
 			// 如果有缓存，检查容器是否需要恢复显示
 			// 注意：相似影片和演员作品需要按顺序恢复，避免DOM查找冲突
@@ -573,6 +574,51 @@ static isDetailsPage() {
 							this.displayCachedActorItems(currentItemId);
 						}
 					}, 50);
+				}
+			}
+			
+			// 恢复番号和网络链接（如果有缓存且不在DOM中）
+			if (hasCodeCache) {
+				console.log('[ExtraFanart] 检查番号和网络链接是否需要恢复');
+				// 检查番号元素是否存在
+				const titleSelectors = [
+					'.detailPagePrimaryContainer h1',
+					'.itemView:not(.hide) .nameContainer .itemName',
+					'.detailPagePrimaryContainer .itemName',
+					'#itemDetailPage:not(.hide) .nameContainer .itemName',
+					'.nameContainer .itemName',
+					'.detailPageContent h1',
+					'.detailPagePrimaryTitle',
+					'.detailPageWatchContainer + div h1',
+					'.detailPageWatchContainer ~ div h1',
+					'.mainDetailButtons + div h1',
+					'div[data-role="page"]:not(.hide) h1',
+					'div[data-role="page"]:not(.hide) .itemName',
+					'.page:not(.hide) h1',
+					'.page:not(.hide) .itemName',
+					'h1',
+					'.itemName'
+				];
+				
+				let titleElement = null;
+				for (const selector of titleSelectors) {
+					const el = document.querySelector(selector);
+					if (el && el.textContent.trim()) {
+						titleElement = el;
+						break;
+					}
+				}
+				
+				if (titleElement) {
+					const existingCode = titleElement.querySelector('.jv-copy-code');
+					const existingLinksContainer = titleElement.parentElement?.querySelector('.jv-web-links-container');
+					const cachedCodeInfo = this.cachedCodes.get(currentItemId);
+					
+					// 如果番号或网络链接缺失，重新显示
+					if (!existingCode || (this.enableWebLinks && cachedCodeInfo.webLinks && cachedCodeInfo.webLinks.length > 0 && !existingLinksContainer)) {
+						console.log('[ExtraFanart] 番号或网络链接缺失，重新显示', { hasCode: !!existingCode, hasLinks: !!existingLinksContainer });
+						this.displayCachedCode(currentItemId);
+					}
 				}
 			}
 		}, 150);
@@ -944,18 +990,18 @@ static isDetailsPage() {
 				.map(entry => entry.item)
 				.slice(0, 24);
 			
-		// 再次检查是否还在详情页（异步加载期间用户可能离开）
-		if (!this.isDetailsPage()) {
-			console.log('[ExtraFanart] 加载完成后检查：已离开详情页，取消显示相似影片');
-			return;
-		}
-		
 		// 保存加载时的 itemId，用于后续检查
 		const loadedItemId = this.itemId;
 		
-		// 缓存相似影片数据
+		// 无论是否在详情页，都先缓存数据，以便返回时恢复
 		this.cachedSimilarItems.set(loadedItemId, shuffled);
 		console.log('[ExtraFanart] 相似影片已缓存');
+		
+		// 检查是否还在详情页（异步加载期间用户可能离开）
+		if (!this.isDetailsPage()) {
+			console.log('[ExtraFanart] 加载完成后检查：已离开详情页，数据已缓存但取消显示');
+			return;
+		}
 		
 		// 最终检查：确保 itemId 没有变化（用户可能快速切换页面）
 		if (this.itemId !== loadedItemId) {
@@ -2788,31 +2834,29 @@ static isDetailsPage() {
 				}
 			}
 			
-			if (actorsData.length === 0) return;
-			
-			// 再次检查是否还在详情页（异步加载期间用户可能离开）
-			if (!this.isDetailsPage()) {
-				console.log('[ExtraFanart] 加载完成后检查：已离开详情页，取消显示演员作品');
-				return;
-			}
-			
-			// 保存加载时的 itemId，用于后续检查
-			const loadedItemId = this.itemId;
-			
-			// 缓存所有演员作品数据
-			this.cachedActorItems.set(loadedItemId, { actors: actorsData });
-			console.log('[ExtraFanart] 已缓存', actorsData.length, '个演员的作品数据');
-			
-			// 最终检查：确保 itemId 没有变化（用户可能快速切换页面）
-			if (this.itemId !== loadedItemId) {
-				console.log('[ExtraFanart] itemId已变化，取消显示演员作品', { loaded: loadedItemId, current: this.itemId });
-				return;
-			}
-			
-			// 显示所有演员的作品
-			this.displayAllActorsItems(actorsData);
-			
-		} catch (error) {
+		if (actorsData.length === 0) return;
+		
+		// 保存加载时的 itemId，用于后续检查
+		const loadedItemId = this.itemId;
+		
+		// 无论是否在详情页，都先缓存数据，以便返回时恢复
+		this.cachedActorItems.set(loadedItemId, { actors: actorsData });
+		console.log('[ExtraFanart] 已缓存', actorsData.length, '个演员的作品数据');
+		
+		// 再次检查是否还在详情页（异步加载期间用户可能离开）
+		if (!this.isDetailsPage()) {
+			console.log('[ExtraFanart] 加载完成后检查：已离开详情页，数据已缓存但取消显示');
+			return;
+		}
+		
+		// 最终检查：确保 itemId 没有变化（用户可能快速切换页面）
+		if (this.itemId !== loadedItemId) {
+			console.log('[ExtraFanart] itemId已变化，取消显示演员作品', { loaded: loadedItemId, current: this.itemId });
+			return;
+		}
+		
+		// 显示所有演员的作品
+		this.displayAllActorsItems(actorsData);		} catch (error) {
 			console.error('[ExtraFanart] 加载演员作品失败:', error);
 		}
 	}
