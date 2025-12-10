@@ -435,23 +435,77 @@ class HomeSwiper {
 		});
 	}
 	static async getLibItems(refreshFlag) {
-		if (refreshFlag || !localStorage.getItem("CACHE|getLibItems" + ApiClient.getCurrentUserId() + "-" + ApiClient.serverId())) {
-			this.cacheRefreshFlag = false;
-			console.log("[HomeSwiper] 开始获取媒体库数据");
-			let libdata;
+		// 先检查缓存数据是否有效
+		const cacheKey = "CACHE|getLibItems" + ApiClient.getCurrentUserId() + "-" + ApiClient.serverId();
+		let cachedData = null;
+		
+		if (!refreshFlag && localStorage.getItem(cacheKey)) {
 			try {
-				libdata = await ApiClient.getUserViews({}, ApiClient.getCurrentUserId());
-				console.log("[HomeSwiper] 成功获取媒体库列表，数量：", libdata?.Items?.length || 0);
+				cachedData = JSON.parse(localStorage.getItem(cacheKey));
+				// 验证缓存数据有效性
+				if (!cachedData || !Array.isArray(cachedData) || cachedData.length === 0) {
+					console.warn("[HomeSwiper警告] 缓存数据无效或为空，将重新获取");
+					cachedData = null;
+					localStorage.removeItem(cacheKey); // 清除无效缓存
+				} else {
+					// 检查每个数据项是否有效
+					let hasValidData = false;
+					for (const item of cachedData) {
+						if (item.data && Array.isArray(item.data) && item.data.length > 0) {
+							hasValidData = true;
+							break;
+						}
+					}
+					if (!hasValidData) {
+						console.warn("[HomeSwiper警告] 缓存数据不包含有效项目，将重新获取");
+						cachedData = null;
+						localStorage.removeItem(cacheKey);
+					} else {
+						console.log("[HomeSwiper] 使用有效缓存数据，包含", cachedData.length, "组数据");
+						return cachedData;
+					}
+				}
 			} catch (error) {
-				console.error("[HomeSwiper错误] 获取媒体库失败：", error);
-				console.error("[HomeSwiper错误] 错误详情：", error.message);
-				return [];
+				console.error("[HomeSwiper错误] 解析缓存数据失败：", error);
+				localStorage.removeItem(cacheKey);
+				cachedData = null;
 			}
-			
-			if (!libdata || !libdata.Items || libdata.Items.length === 0) {
-				console.error("[HomeSwiper错误] 媒体库数据为空");
-				return [];
+		}
+		
+		// 需要重新获取数据
+		this.cacheRefreshFlag = false;
+		console.log("[HomeSwiper] 开始获取媒体库数据");
+		let libdata;
+		const maxRetries = 3;
+		let retryCount = 0;
+		
+		// 增加重试逻辑，特别针对内网环境
+		while (retryCount < maxRetries) {
+			try {
+				console.log(`[HomeSwiper] 尝试获取媒体库列表 (第 ${retryCount + 1}/${maxRetries} 次)`);
+				libdata = await Promise.race([
+					ApiClient.getUserViews({}, ApiClient.getCurrentUserId()),
+					new Promise((_, reject) => setTimeout(() => reject(new Error('获取媒体库列表超时')), 30000)) // 增加到30秒
+				]);
+				console.log("[HomeSwiper] 成功获取媒体库列表，数量：", libdata?.Items?.length || 0);
+				break; // 成功获取，跳出循环
+			} catch (error) {
+				retryCount++;
+				console.error(`[HomeSwiper错误] 获取媒体库失败 (第 ${retryCount}/${maxRetries} 次)：`, error.message);
+				if (retryCount < maxRetries) {
+					console.log(`[HomeSwiper] 等待3秒后重试...`);
+					await new Promise(r => setTimeout(r, 3000));
+				} else {
+					console.error("[HomeSwiper错误] 多次重试失败，无法获取媒体库数据");
+					return [];
+				}
 			}
+		}
+		
+		if (!libdata || !libdata.Items || libdata.Items.length === 0) {
+			console.error("[HomeSwiper错误] 媒体库数据为空");
+			return [];
+		}
 			
 			let libdataitem = this.user.Policy.EnableAllFolders ? libdata.Items : libdata.Items.filter(m => this.user.Policy.EnabledFolders.includes(m.Guid));
 			console.log("[HomeSwiper] 启用的媒体库数量：", libdataitem.length);
@@ -500,13 +554,13 @@ class HomeSwiper {
 							try {
 								result = await Promise.race([
 									this.getItems(libraryQuery),
-									new Promise((_, reject) => setTimeout(() => reject(new Error('API请求超时')), 15000))
+									new Promise((_, reject) => setTimeout(() => reject(new Error('API请求超时')), 30000)) // 增加到30秒
 								]);
 							} catch (error) {
 								console.error(`[HomeSwiper错误] 媒体库 "${library.Name}" 第 ${attempts} 次获取项目失败：`, error.message);
 								if (attempts < maxAttempts) {
-									console.log(`[HomeSwiper] 等待2秒后重试...`);
-									await new Promise(r => setTimeout(r, 2000));
+									console.log(`[HomeSwiper] 等待3秒后重试...`);
+									await new Promise(r => setTimeout(r, 3000));
 									continue;
 								}
 								break;
@@ -599,13 +653,13 @@ class HomeSwiper {
 					try {
 						result = await Promise.race([
 							this.getItems(this.itemQuery),
-							new Promise((_, reject) => setTimeout(() => reject(new Error('API请求超时')), 15000))
+							new Promise((_, reject) => setTimeout(() => reject(new Error('API请求超时')), 30000)) // 增加到30秒
 						]);
 					} catch (error) {
 						console.error(`[HomeSwiper错误] 第 ${attempts} 次获取项目失败：`, error.message);
 						if (attempts < maxAttempts) {
-							console.log(`[HomeSwiper] 等待2秒后重试...`);
-							await new Promise(r => setTimeout(r, 2000));
+							console.log(`[HomeSwiper] 等待3秒后重试...`);
+							await new Promise(r => setTimeout(r, 3000));
 							continue;
 						}
 						break;
@@ -664,19 +718,19 @@ class HomeSwiper {
 				validItems.length !== 0 && Alldata.push({ data: validItems, Id: 0 });
 			}
 
-			const data = JSON.stringify(Alldata);
-			localStorage.setItem("CACHE|getLibItems" + ApiClient.getCurrentUserId() + "-" + ApiClient.serverId(), data);
-			require(["datetime"], function (datetime) {
-				localStorage.setItem('CACHE|Movies-Date', datetime.toLocaleDateString(new Date(), { dateStyle: "short" }))
-			});
-		} else {
-			require(["datetime"], function (datetime) {
-				if (localStorage.getItem('CACHE|Movies-Date') !== datetime.toLocaleDateString(new Date(), { dateStyle: "short" })) {
-					this.cacheRefreshFlag = true;
-				}
-			}.bind(this));
-		}
-		return JSON.parse(localStorage.getItem("CACHE|getLibItems" + ApiClient.getCurrentUserId() + "-" + ApiClient.serverId()));
+			// 只有在成功获取到有效数据时才缓存
+			if (Alldata.length > 0 && Alldata[0].data && Alldata[0].data.length > 0) {
+				const data = JSON.stringify(Alldata);
+				localStorage.setItem(cacheKey, data);
+				require(["datetime"], function (datetime) {
+					localStorage.setItem('CACHE|Movies-Date', datetime.toLocaleDateString(new Date(), { dateStyle: "short" }))
+				});
+				console.log("[HomeSwiper] 数据已缓存，包含", Alldata[0].data.length, "个项目");
+			} else {
+				console.warn("[HomeSwiper警告] 未能获取到有效数据，不进行缓存");
+			}
+			
+			return Alldata;
 	}
 	
 	// 新增：洗牌算法（Fisher-Yates）
