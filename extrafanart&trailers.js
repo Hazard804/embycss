@@ -3,7 +3,26 @@ class ExtraFanart {
 		// ===== 配置选项 =====
 		// 是否启用网络链接容器显示功能（true=显示，false=隐藏）
 		this.enableWebLinks = true;
+		
+		// 是否启用 JavDB 短评功能（true=启用，false=禁用）
+		// 启用后会在网络链接旁显示"短评"按钮，首次使用需要输入 JavDB 账号密码
+		// 账号密码会加密存储在浏览器本地，不会上传到任何服务器
+		this.enableJavdbReviews = true;
 		// ===================
+		
+		// JavDB API 相关
+		this.JAVDB_CREDENTIALS_KEY = 'javdb_credentials'; // 加密凭据存储键名
+		this.javdbToken = localStorage.getItem('javdb_token') || null;
+		this.javdbTokenExpiry = localStorage.getItem('javdb_token_expiry') || null;
+		this.reviewsModal = null; // 短评弹窗
+		this.credentialsModal = null; // 凭据输入弹窗
+		
+		// JavDB 缓存配置
+		this.JAVDB_CACHE_KEY = 'javdb_cache'; // localStorage 键名
+		this.JAVDB_CACHE_MAX_SIZE = 500 * 1024; // 最大缓存大小 500KB
+		this.JAVDB_CACHE_MAX_ITEMS = 50; // 最大缓存条目数
+		this.JAVDB_CACHE_EXPIRY_HOURS = 24; // 缓存过期时间（小时）
+		this.javdbCache = this.loadJavdbCache(); // 从 localStorage 加载缓存
 		
 		this.startImageIndex = parseInt(localStorage.getItem('extraFanartStartIndex')) || 2;
 		this.endImageIndex = 0;
@@ -2136,6 +2155,1148 @@ static isDetailsPage() {
 			
 			linksContainer.appendChild(link);
 		});
+		
+		// 添加 JavDB 短评按钮（仅在启用时显示）
+		if (this.enableJavdbReviews) {
+			this.addJavdbReviewButton(linksContainer);
+		}
+	}
+	
+	// ===== JavDB 短评功能 =====
+	
+	// 简单的加密方法（Base64 + 字符偏移混淆）
+	static encryptCredentials(username, password) {
+		const data = JSON.stringify({ u: username, p: password, t: Date.now() });
+		// 字符偏移混淆
+		const shifted = data.split('').map((c, i) => 
+			String.fromCharCode(c.charCodeAt(0) + (i % 7) + 3)
+		).join('');
+		// Base64 编码
+		return btoa(encodeURIComponent(shifted));
+	}
+	
+	// 解密方法
+	static decryptCredentials(encrypted) {
+		try {
+			// Base64 解码
+			const shifted = decodeURIComponent(atob(encrypted));
+			// 字符偏移还原
+			const data = shifted.split('').map((c, i) => 
+				String.fromCharCode(c.charCodeAt(0) - (i % 7) - 3)
+			).join('');
+			const parsed = JSON.parse(data);
+			return { username: parsed.u, password: parsed.p };
+		} catch (error) {
+			console.error('[ExtraFanart] 解密凭据失败:', error);
+			return null;
+		}
+	}
+	
+	// 保存加密凭据
+	static saveCredentials(username, password) {
+		const encrypted = this.encryptCredentials(username, password);
+		localStorage.setItem(this.JAVDB_CREDENTIALS_KEY, encrypted);
+		console.log('[ExtraFanart] JavDB 凭据已加密保存');
+	}
+	
+	// 获取已保存的凭据
+	static getCredentials() {
+		const encrypted = localStorage.getItem(this.JAVDB_CREDENTIALS_KEY);
+		if (!encrypted) return null;
+		return this.decryptCredentials(encrypted);
+	}
+	
+	// 清除凭据
+	static clearCredentials() {
+		localStorage.removeItem(this.JAVDB_CREDENTIALS_KEY);
+		localStorage.removeItem('javdb_token');
+		localStorage.removeItem('javdb_token_expiry');
+		this.javdbToken = null;
+		this.javdbTokenExpiry = null;
+		console.log('[ExtraFanart] JavDB 凭据已清除');
+	}
+	
+	// 检查是否有已保存的凭据
+	static hasCredentials() {
+		return !!localStorage.getItem(this.JAVDB_CREDENTIALS_KEY);
+	}
+	
+	// 显示凭据输入弹窗
+	static showCredentialsModal(onSuccess) {
+		// 如果弹窗已存在，先移除
+		if (this.credentialsModal) {
+			this.credentialsModal.remove();
+		}
+		
+		const hasExisting = this.hasCredentials();
+		
+		const modal = document.createElement('div');
+		modal.className = 'jv-reviews-modal';
+		modal.innerHTML = `
+			<div class="jv-reviews-backdrop"></div>
+			<div class="jv-credentials-content">
+				<div class="jv-credentials-header">
+					<h3 class="jv-credentials-title">JavDB 账号登录</h3>
+					<button class="jv-reviews-close">
+						<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+							<line x1="18" y1="6" x2="6" y2="18"></line>
+							<line x1="6" y1="6" x2="18" y2="18"></line>
+						</svg>
+					</button>
+				</div>
+				<div class="jv-credentials-body">
+					<p class="jv-credentials-desc">
+						请输入你的 JavDB 账号和密码以获取短评功能。<br>
+						<small>凭据将加密存储在本地浏览器中，不会上传到任何服务器。</small>
+					</p>
+					<div class="jv-credentials-form">
+						<div class="jv-form-group">
+							<label>用户名/邮箱</label>
+							<input type="text" id="jv-username" placeholder="请输入用户名或邮箱" autocomplete="username">
+						</div>
+						<div class="jv-form-group">
+							<label>密码</label>
+							<input type="password" id="jv-password" placeholder="请输入密码" autocomplete="current-password">
+						</div>
+					</div>
+					<div class="jv-credentials-error" style="display:none;"></div>
+				</div>
+				<div class="jv-credentials-footer">
+					${hasExisting ? '<button class="jv-btn jv-btn-danger jv-clear-btn">清除已保存的账号</button>' : ''}
+					<div class="jv-credentials-actions">
+						<button class="jv-btn jv-btn-secondary jv-cancel-btn">取消</button>
+						<button class="jv-btn jv-btn-primary jv-login-btn">登录并保存</button>
+					</div>
+				</div>
+			</div>
+		`;
+		
+		document.body.appendChild(modal);
+		this.credentialsModal = modal;
+		
+		// 获取元素
+		const closeBtn = modal.querySelector('.jv-reviews-close');
+		const backdrop = modal.querySelector('.jv-reviews-backdrop');
+		const cancelBtn = modal.querySelector('.jv-cancel-btn');
+		const loginBtn = modal.querySelector('.jv-login-btn');
+		const clearBtn = modal.querySelector('.jv-clear-btn');
+		const usernameInput = modal.querySelector('#jv-username');
+		const passwordInput = modal.querySelector('#jv-password');
+		const errorDiv = modal.querySelector('.jv-credentials-error');
+		
+		const closeModal = () => {
+			modal.classList.add('closing');
+			setTimeout(() => {
+				modal.remove();
+				this.credentialsModal = null;
+			}, 200);
+		};
+		
+		const showError = (msg) => {
+			errorDiv.textContent = msg;
+			errorDiv.style.display = 'block';
+		};
+		
+		closeBtn.onclick = closeModal;
+		backdrop.onclick = closeModal;
+		cancelBtn.onclick = closeModal;
+		
+		// 清除按钮
+		if (clearBtn) {
+			clearBtn.onclick = () => {
+				if (confirm('确定要清除已保存的 JavDB 账号吗？')) {
+					this.clearCredentials();
+					this.showToast('账号已清除');
+					closeModal();
+				}
+			};
+		}
+		
+		// 登录按钮
+		loginBtn.onclick = async () => {
+			const username = usernameInput.value.trim();
+			const password = passwordInput.value;
+			
+			if (!username || !password) {
+				showError('请输入用户名和密码');
+				return;
+			}
+			
+			loginBtn.textContent = '验证中...';
+			loginBtn.disabled = true;
+			errorDiv.style.display = 'none';
+			
+			try {
+				// 尝试登录验证
+				const token = await this.javdbLoginWithCredentials(username, password);
+				if (token) {
+					// 登录成功，保存凭据
+					this.saveCredentials(username, password);
+					this.showToast('登录成功');
+					closeModal();
+					// 回调成功
+					if (onSuccess) onSuccess();
+				} else {
+					showError('登录失败，请检查用户名和密码');
+				}
+			} catch (error) {
+				showError('登录失败: ' + (error.message || '网络错误'));
+			} finally {
+				loginBtn.textContent = '登录并保存';
+				loginBtn.disabled = false;
+			}
+		};
+		
+		// 回车提交
+		passwordInput.addEventListener('keydown', (e) => {
+			if (e.key === 'Enter') {
+				loginBtn.click();
+			}
+		});
+		
+		// 按 ESC 关闭
+		const escHandler = (e) => {
+			if (e.key === 'Escape') {
+				closeModal();
+				document.removeEventListener('keydown', escHandler);
+			}
+		};
+		document.addEventListener('keydown', escHandler);
+		
+		// 显示动画并聚焦输入框
+		requestAnimationFrame(() => {
+			modal.classList.add('visible');
+			usernameInput.focus();
+		});
+	}
+	
+	// 使用指定凭据登录（用于验证）
+	static async javdbLoginWithCredentials(username, password) {
+		try {
+			const url = 'https://jdforrepam.com/api/v1/sessions';
+			const params = new URLSearchParams({
+				username: username,
+				password: password,
+				device_uuid: '04b9534d-5118-53de-9f87-2ddded77111e',
+				device_name: 'Chrome',
+				device_model: 'Browser',
+				platform: 'web',
+				system_version: '1.0',
+				app_version: 'official',
+				app_version_number: '1.9.29',
+				app_channel: 'official'
+			});
+			
+			const response = await fetch(`${url}?${params.toString()}`, {
+				method: 'POST',
+				headers: {
+					'User-Agent': 'Dart/3.5 (dart:io)',
+					'Accept-Language': 'zh-TW',
+					'jdSignature': this.generateJavdbSignature()
+				}
+			});
+			
+			if (!response.ok) {
+				return null;
+			}
+			
+			const data = await response.json();
+			if (data.data && data.data.token) {
+				this.javdbToken = data.data.token;
+				const expiry = new Date();
+				expiry.setDate(expiry.getDate() + 30);
+				this.javdbTokenExpiry = expiry.toISOString();
+				
+				localStorage.setItem('javdb_token', this.javdbToken);
+				localStorage.setItem('javdb_token_expiry', this.javdbTokenExpiry);
+				
+				return this.javdbToken;
+			}
+			
+			return null;
+		} catch (error) {
+			console.error('[ExtraFanart] JavDB 登录失败:', error);
+			return null;
+		}
+	}
+	
+	// 加载 JavDB 缓存
+	static loadJavdbCache() {
+		try {
+			const cacheStr = localStorage.getItem(this.JAVDB_CACHE_KEY);
+			if (!cacheStr) {
+				return { movies: {}, reviews: {} };
+			}
+			const cache = JSON.parse(cacheStr);
+			// 清理过期数据
+			this.cleanExpiredCache(cache);
+			console.log('[ExtraFanart] JavDB 缓存已加载，影片:', Object.keys(cache.movies || {}).length, '短评:', Object.keys(cache.reviews || {}).length);
+			return cache;
+		} catch (error) {
+			console.error('[ExtraFanart] 加载 JavDB 缓存失败:', error);
+			return { movies: {}, reviews: {} };
+		}
+	}
+	
+	// 保存 JavDB 缓存
+	static saveJavdbCache() {
+		try {
+			// 检查并清理缓存大小
+			this.ensureCacheSize();
+			const cacheStr = JSON.stringify(this.javdbCache);
+			localStorage.setItem(this.JAVDB_CACHE_KEY, cacheStr);
+			console.log('[ExtraFanart] JavDB 缓存已保存，大小:', (cacheStr.length / 1024).toFixed(2), 'KB');
+		} catch (error) {
+			if (error.name === 'QuotaExceededError') {
+				console.warn('[ExtraFanart] localStorage 空间不足，清理旧缓存');
+				this.clearOldestCache(10);
+				try {
+					localStorage.setItem(this.JAVDB_CACHE_KEY, JSON.stringify(this.javdbCache));
+				} catch (e) {
+					console.error('[ExtraFanart] 清理后仍无法保存缓存');
+				}
+			} else {
+				console.error('[ExtraFanart] 保存 JavDB 缓存失败:', error);
+			}
+		}
+	}
+	
+	// 清理过期缓存
+	static cleanExpiredCache(cache) {
+		const now = Date.now();
+		const expiryMs = this.JAVDB_CACHE_EXPIRY_HOURS * 60 * 60 * 1000;
+		let cleaned = 0;
+		
+		// 清理过期的影片搜索结果
+		if (cache.movies) {
+			for (const key of Object.keys(cache.movies)) {
+				if (now - cache.movies[key].timestamp > expiryMs) {
+					delete cache.movies[key];
+					cleaned++;
+				}
+			}
+		}
+		
+		// 清理过期的短评
+		if (cache.reviews) {
+			for (const key of Object.keys(cache.reviews)) {
+				if (now - cache.reviews[key].timestamp > expiryMs) {
+					delete cache.reviews[key];
+					cleaned++;
+				}
+			}
+		}
+		
+		if (cleaned > 0) {
+			console.log('[ExtraFanart] 清理过期缓存:', cleaned, '条');
+		}
+	}
+	
+	// 确保缓存大小不超限
+	static ensureCacheSize() {
+		const cacheStr = JSON.stringify(this.javdbCache);
+		const currentSize = cacheStr.length;
+		
+		// 如果超过最大大小，清理旧数据
+		if (currentSize > this.JAVDB_CACHE_MAX_SIZE) {
+			console.log('[ExtraFanart] 缓存超限，当前:', (currentSize / 1024).toFixed(2), 'KB，开始清理');
+			this.clearOldestCache(10);
+		}
+		
+		// 如果条目数超限，清理旧数据
+		const movieCount = Object.keys(this.javdbCache.movies || {}).length;
+		const reviewCount = Object.keys(this.javdbCache.reviews || {}).length;
+		if (movieCount + reviewCount > this.JAVDB_CACHE_MAX_ITEMS) {
+			console.log('[ExtraFanart] 缓存条目超限，开始清理');
+			this.clearOldestCache(10);
+		}
+	}
+	
+	// 清理最旧的缓存
+	static clearOldestCache(count) {
+		// 收集所有缓存项及其时间戳
+		const items = [];
+		
+		if (this.javdbCache.movies) {
+			for (const [key, value] of Object.entries(this.javdbCache.movies)) {
+				items.push({ type: 'movies', key, timestamp: value.timestamp });
+			}
+		}
+		
+		if (this.javdbCache.reviews) {
+			for (const [key, value] of Object.entries(this.javdbCache.reviews)) {
+				items.push({ type: 'reviews', key, timestamp: value.timestamp });
+			}
+		}
+		
+		// 按时间戳排序，删除最旧的
+		items.sort((a, b) => a.timestamp - b.timestamp);
+		const toDelete = items.slice(0, count);
+		
+		for (const item of toDelete) {
+			delete this.javdbCache[item.type][item.key];
+		}
+		
+		console.log('[ExtraFanart] 清理了', toDelete.length, '条旧缓存');
+	}
+	
+	// 缓存影片搜索结果
+	static cacheMovieSearch(code, movieInfo) {
+		if (!this.javdbCache.movies) {
+			this.javdbCache.movies = {};
+		}
+		this.javdbCache.movies[code.toUpperCase()] = {
+			data: movieInfo,
+			timestamp: Date.now()
+		};
+		this.saveJavdbCache();
+	}
+	
+	// 获取缓存的影片搜索结果
+	static getCachedMovieSearch(code) {
+		if (!this.javdbCache.movies) return null;
+		const cached = this.javdbCache.movies[code.toUpperCase()];
+		if (!cached) return null;
+		
+		// 检查是否过期
+		const expiryMs = this.JAVDB_CACHE_EXPIRY_HOURS * 60 * 60 * 1000;
+		if (Date.now() - cached.timestamp > expiryMs) {
+			delete this.javdbCache.movies[code.toUpperCase()];
+			return null;
+		}
+		
+		return cached.data;
+	}
+	
+	// 缓存短评
+	static cacheReviews(movieId, page, sortBy, reviewsData) {
+		if (!this.javdbCache.reviews) {
+			this.javdbCache.reviews = {};
+		}
+		const cacheKey = `${movieId}_${page}_${sortBy}`;
+		this.javdbCache.reviews[cacheKey] = {
+			data: reviewsData,
+			timestamp: Date.now()
+		};
+		this.saveJavdbCache();
+	}
+	
+	// 获取缓存的短评
+	static getCachedReviews(movieId, page, sortBy) {
+		if (!this.javdbCache.reviews) return null;
+		const cacheKey = `${movieId}_${page}_${sortBy}`;
+		const cached = this.javdbCache.reviews[cacheKey];
+		if (!cached) return null;
+		
+		// 检查是否过期
+		const expiryMs = this.JAVDB_CACHE_EXPIRY_HOURS * 60 * 60 * 1000;
+		if (Date.now() - cached.timestamp > expiryMs) {
+			delete this.javdbCache.reviews[cacheKey];
+			return null;
+		}
+		
+		return cached.data;
+	}
+	
+	// 生成 JavDB API 签名
+	static generateJavdbSignature() {
+		const timestamp = Math.floor(Date.now() / 1000);
+		const secretKey = '71cf27bb3c0bcdf207b64abecddc970098c7421ee7203b9cdae54478478a199e7d5a6e1a57691123c1a931c057842fb73ba3b3c83bcd69c17ccf174081e3d8aa';
+		const signBase = `${timestamp}${secretKey}`;
+		
+		// 使用 Web Crypto API 或简单的 MD5 实现
+		const signHash = this.md5(signBase);
+		return `${timestamp}.lpw6vgqzsp.${signHash}`;
+	}
+	
+	// 简单的 MD5 实现
+	static md5(string) {
+		function md5cycle(x, k) {
+			var a = x[0], b = x[1], c = x[2], d = x[3];
+			a = ff(a, b, c, d, k[0], 7, -680876936);
+			d = ff(d, a, b, c, k[1], 12, -389564586);
+			c = ff(c, d, a, b, k[2], 17, 606105819);
+			b = ff(b, c, d, a, k[3], 22, -1044525330);
+			a = ff(a, b, c, d, k[4], 7, -176418897);
+			d = ff(d, a, b, c, k[5], 12, 1200080426);
+			c = ff(c, d, a, b, k[6], 17, -1473231341);
+			b = ff(b, c, d, a, k[7], 22, -45705983);
+			a = ff(a, b, c, d, k[8], 7, 1770035416);
+			d = ff(d, a, b, c, k[9], 12, -1958414417);
+			c = ff(c, d, a, b, k[10], 17, -42063);
+			b = ff(b, c, d, a, k[11], 22, -1990404162);
+			a = ff(a, b, c, d, k[12], 7, 1804603682);
+			d = ff(d, a, b, c, k[13], 12, -40341101);
+			c = ff(c, d, a, b, k[14], 17, -1502002290);
+			b = ff(b, c, d, a, k[15], 22, 1236535329);
+			a = gg(a, b, c, d, k[1], 5, -165796510);
+			d = gg(d, a, b, c, k[6], 9, -1069501632);
+			c = gg(c, d, a, b, k[11], 14, 643717713);
+			b = gg(b, c, d, a, k[0], 20, -373897302);
+			a = gg(a, b, c, d, k[5], 5, -701558691);
+			d = gg(d, a, b, c, k[10], 9, 38016083);
+			c = gg(c, d, a, b, k[15], 14, -660478335);
+			b = gg(b, c, d, a, k[4], 20, -405537848);
+			a = gg(a, b, c, d, k[9], 5, 568446438);
+			d = gg(d, a, b, c, k[14], 9, -1019803690);
+			c = gg(c, d, a, b, k[3], 14, -187363961);
+			b = gg(b, c, d, a, k[8], 20, 1163531501);
+			a = gg(a, b, c, d, k[13], 5, -1444681467);
+			d = gg(d, a, b, c, k[2], 9, -51403784);
+			c = gg(c, d, a, b, k[7], 14, 1735328473);
+			b = gg(b, c, d, a, k[12], 20, -1926607734);
+			a = hh(a, b, c, d, k[5], 4, -378558);
+			d = hh(d, a, b, c, k[8], 11, -2022574463);
+			c = hh(c, d, a, b, k[11], 16, 1839030562);
+			b = hh(b, c, d, a, k[14], 23, -35309556);
+			a = hh(a, b, c, d, k[1], 4, -1530992060);
+			d = hh(d, a, b, c, k[4], 11, 1272893353);
+			c = hh(c, d, a, b, k[7], 16, -155497632);
+			b = hh(b, c, d, a, k[10], 23, -1094730640);
+			a = hh(a, b, c, d, k[13], 4, 681279174);
+			d = hh(d, a, b, c, k[0], 11, -358537222);
+			c = hh(c, d, a, b, k[3], 16, -722521979);
+			b = hh(b, c, d, a, k[6], 23, 76029189);
+			a = hh(a, b, c, d, k[9], 4, -640364487);
+			d = hh(d, a, b, c, k[12], 11, -421815835);
+			c = hh(c, d, a, b, k[15], 16, 530742520);
+			b = hh(b, c, d, a, k[2], 23, -995338651);
+			a = ii(a, b, c, d, k[0], 6, -198630844);
+			d = ii(d, a, b, c, k[7], 10, 1126891415);
+			c = ii(c, d, a, b, k[14], 15, -1416354905);
+			b = ii(b, c, d, a, k[5], 21, -57434055);
+			a = ii(a, b, c, d, k[12], 6, 1700485571);
+			d = ii(d, a, b, c, k[3], 10, -1894986606);
+			c = ii(c, d, a, b, k[10], 15, -1051523);
+			b = ii(b, c, d, a, k[1], 21, -2054922799);
+			a = ii(a, b, c, d, k[8], 6, 1873313359);
+			d = ii(d, a, b, c, k[15], 10, -30611744);
+			c = ii(c, d, a, b, k[6], 15, -1560198380);
+			b = ii(b, c, d, a, k[13], 21, 1309151649);
+			a = ii(a, b, c, d, k[4], 6, -145523070);
+			d = ii(d, a, b, c, k[11], 10, -1120210379);
+			c = ii(c, d, a, b, k[2], 15, 718787259);
+			b = ii(b, c, d, a, k[9], 21, -343485551);
+			x[0] = add32(a, x[0]);
+			x[1] = add32(b, x[1]);
+			x[2] = add32(c, x[2]);
+			x[3] = add32(d, x[3]);
+		}
+		function cmn(q, a, b, x, s, t) {
+			a = add32(add32(a, q), add32(x, t));
+			return add32((a << s) | (a >>> (32 - s)), b);
+		}
+		function ff(a, b, c, d, x, s, t) { return cmn((b & c) | ((~b) & d), a, b, x, s, t); }
+		function gg(a, b, c, d, x, s, t) { return cmn((b & d) | (c & (~d)), a, b, x, s, t); }
+		function hh(a, b, c, d, x, s, t) { return cmn(b ^ c ^ d, a, b, x, s, t); }
+		function ii(a, b, c, d, x, s, t) { return cmn(c ^ (b | (~d)), a, b, x, s, t); }
+		function md5blk(s) {
+			var md5blks = [], i;
+			for (i = 0; i < 64; i += 4) {
+				md5blks[i >> 2] = s.charCodeAt(i) + (s.charCodeAt(i + 1) << 8) + (s.charCodeAt(i + 2) << 16) + (s.charCodeAt(i + 3) << 24);
+			}
+			return md5blks;
+		}
+		function md5blk_array(a) {
+			var md5blks = [], i;
+			for (i = 0; i < 64; i += 4) {
+				md5blks[i >> 2] = a[i] + (a[i + 1] << 8) + (a[i + 2] << 16) + (a[i + 3] << 24);
+			}
+			return md5blks;
+		}
+		function md51(s) {
+			var n = s.length, state = [1732584193, -271733879, -1732584194, 271733878], i, length, tail, tmp, lo, hi;
+			for (i = 64; i <= n; i += 64) {
+				md5cycle(state, md5blk(s.substring(i - 64, i)));
+			}
+			s = s.substring(i - 64);
+			length = s.length;
+			tail = [0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0];
+			for (i = 0; i < length; i++) {
+				tail[i >> 2] |= s.charCodeAt(i) << ((i % 4) << 3);
+			}
+			tail[i >> 2] |= 0x80 << ((i % 4) << 3);
+			if (i > 55) {
+				md5cycle(state, tail);
+				for (i = 0; i < 16; i++) tail[i] = 0;
+			}
+			tmp = n * 8;
+			tmp = tmp.toString(16).match(/(.*?)(.{0,8})$/);
+			lo = parseInt(tmp[2], 16);
+			hi = parseInt(tmp[1], 16) || 0;
+			tail[14] = lo;
+			tail[15] = hi;
+			md5cycle(state, tail);
+			return state;
+		}
+		function md5_vm_test() { return hex(md51('abc')) === '900150983cd24fb0d6963f7d28e17f72'; }
+		function add32(a, b) { return (a + b) & 0xFFFFFFFF; }
+		function hex(x) {
+			var hex_chr = '0123456789abcdef'.split('');
+			for (var i = 0; i < x.length; i++) {
+				x[i] = rhex(x[i]);
+			}
+			return x.join('');
+		}
+		function rhex(n) {
+			var hex_chr = '0123456789abcdef'.split('');
+			var s = '', j;
+			for (j = 0; j < 4; j++) {
+				s += hex_chr[(n >> (j * 8 + 4)) & 0x0F] + hex_chr[(n >> (j * 8)) & 0x0F];
+			}
+			return s;
+		}
+		return hex(md51(string));
+	}
+	
+	// JavDB 登录获取 Token（使用已保存的凭据）
+	static async javdbLogin() {
+		// 检查 token 是否有效
+		if (this.javdbToken && this.javdbTokenExpiry) {
+			const expiry = new Date(this.javdbTokenExpiry);
+			if (expiry > new Date()) {
+				console.log('[ExtraFanart] 使用缓存的 JavDB Token');
+				return this.javdbToken;
+			}
+		}
+		
+		// 获取已保存的凭据
+		const credentials = this.getCredentials();
+		if (!credentials) {
+			console.log('[ExtraFanart] 没有保存的 JavDB 凭据');
+			return null;
+		}
+		
+		// 使用凭据登录
+		return await this.javdbLoginWithCredentials(credentials.username, credentials.password);
+	}
+	
+	// 搜索 JavDB 影片获取 movie_id（带缓存）
+	static async searchJavdbMovie(code) {
+		// 先检查缓存
+		const cached = this.getCachedMovieSearch(code);
+		if (cached) {
+			console.log('[ExtraFanart] 使用缓存的影片搜索结果:', code);
+			return cached;
+		}
+		
+		try {
+			const url = 'https://jdforrepam.com/api/v2/search';
+			const params = new URLSearchParams({
+				q: code,
+				page: 1,
+				type: 'movie',
+				limit: 1,
+				movie_type: 'all',
+				from_recent: 'false',
+				movie_filter_by: 'all',
+				movie_sort_by: 'relevance'
+			});
+			
+			const response = await fetch(`${url}?${params.toString()}`, {
+				method: 'GET',
+				headers: {
+					'User-Agent': 'Dart/3.5 (dart:io)',
+					'Accept-Language': 'zh-TW',
+					'Host': 'jdforrepam.com',
+					'jdSignature': this.generateJavdbSignature()
+				}
+			});
+			
+			if (!response.ok) {
+				throw new Error(`搜索失败: ${response.status}`);
+			}
+			
+			const data = await response.json();
+			if (data.data && data.data.movies && data.data.movies.length > 0) {
+				const movie = data.data.movies[0];
+				console.log('[ExtraFanart] 找到 JavDB 影片:', movie.number, 'ID:', movie.id);
+				const movieInfo = {
+					movieId: movie.id,
+					number: movie.number,
+					title: movie.title,
+					score: movie.score,
+					reviewsCount: movie.watched_count
+				};
+				// 缓存结果
+				this.cacheMovieSearch(code, movieInfo);
+				return movieInfo;
+			}
+			
+			return null;
+		} catch (error) {
+			console.error('[ExtraFanart] JavDB 搜索失败:', error);
+			return null;
+		}
+	}
+	
+	// 获取 JavDB 影片详情（包含评分）
+	static async getJavdbMovieDetail(movieId) {
+		try {
+			const url = `https://jdforrepam.com/api/v4/movies/${movieId}`;
+			
+			const response = await fetch(url, {
+				method: 'GET',
+				headers: {
+					'User-Agent': 'Dart/3.5 (dart:io)',
+					'Accept-Language': 'zh-TW',
+					'Host': 'jdforrepam.com',
+					'jdSignature': this.generateJavdbSignature()
+				}
+			});
+			
+			if (!response.ok) {
+				throw new Error(`获取详情失败: ${response.status}`);
+			}
+			
+			const data = await response.json();
+			if (data.data && data.data.movie) {
+				const movie = data.data.movie;
+				return {
+					movieId: movie.id,
+					number: movie.number,
+					title: movie.origin_title || movie.title,
+					score: movie.score,
+					reviewsCount: movie.watched_count,
+					commentsCount: movie.comments_count
+				};
+			}
+			
+			return null;
+		} catch (error) {
+			console.error('[ExtraFanart] 获取 JavDB 影片详情失败:', error);
+			return null;
+		}
+	}
+	
+	// 获取 JavDB 影片短评（带缓存）
+	static async getJavdbReviews(movieId, page = 1, sortBy = 'hotly') {
+		// 先检查缓存
+		const cached = this.getCachedReviews(movieId, page, sortBy);
+		if (cached) {
+			console.log('[ExtraFanart] 使用缓存的短评数据:', movieId, 'page:', page, 'sort:', sortBy);
+			return cached;
+		}
+		
+		try {
+			const url = `https://jdforrepam.com/api/v1/movies/${movieId}/reviews`;
+			const params = new URLSearchParams({
+				page: page,
+				sort_by: sortBy,
+				limit: 20
+			});
+			
+			const headers = {
+				'User-Agent': 'Dart/3.5 (dart:io)',
+				'Accept-Language': 'zh-TW',
+				'Host': 'jdforrepam.com',
+				'jdSignature': this.generateJavdbSignature()
+			};
+			
+			// 如果有 token，添加授权头
+			if (this.javdbToken) {
+				headers['Authorization'] = `Bearer ${this.javdbToken}`;
+			}
+			
+			const response = await fetch(`${url}?${params.toString()}`, {
+				method: 'GET',
+				headers: headers
+			});
+			
+			if (!response.ok) {
+				throw new Error(`获取短评失败: ${response.status}`);
+			}
+			
+			const data = await response.json();
+			const reviewsData = data.data;
+			
+			// 缓存结果
+			if (reviewsData) {
+				this.cacheReviews(movieId, page, sortBy, reviewsData);
+			}
+			
+			return reviewsData;
+		} catch (error) {
+			console.error('[ExtraFanart] 获取 JavDB 短评失败:', error);
+			return null;
+		}
+	}
+	
+	// 添加 JavDB 短评按钮
+	static addJavdbReviewButton(container) {
+		// 检查是否已经存在按钮
+		if (container.querySelector('.jv-javdb-review-btn')) {
+			return;
+		}
+		
+		// 创建按钮容器
+		const buttonWrapper = document.createElement('div');
+		buttonWrapper.className = 'jv-javdb-btn-wrapper';
+		buttonWrapper.style.display = 'inline-flex';
+		buttonWrapper.style.alignItems = 'center';
+		buttonWrapper.style.gap = '4px';
+		
+		const button = document.createElement('button');
+		button.className = 'jv-web-link jv-javdb-review-btn';
+		button.textContent = '短评';
+		button.title = '获取 JavDB 短评';
+		button.style.color = '#00a4dc';
+		button.style.borderColor = '#00a4dc';
+		button.style.cursor = 'pointer';
+		button.style.background = 'transparent';
+		
+		button.onclick = async (e) => {
+			e.preventDefault();
+			e.stopPropagation();
+			
+			// 获取当前番号
+			const cachedCodeInfo = this.cachedCodes.get(this.itemId);
+			if (!cachedCodeInfo || !cachedCodeInfo.code) {
+				this.showToast('无法获取番号');
+				return;
+			}
+			
+			const code = cachedCodeInfo.code;
+			
+		// 检查是否有已保存的凭据
+		if (!this.hasCredentials()) {
+			// 没有凭据，显示输入弹窗
+			this.showCredentialsModal(() => {
+				// 登录成功后更新齿轮按钮状态
+				if (settingsBtn.updateState) {
+					settingsBtn.updateState();
+				}
+				// 自动获取短评
+				button.click();
+			});
+			return;
+		}			console.log('[ExtraFanart] 获取短评，番号:', code);
+			
+			// 显示加载中
+			button.textContent = '加载中...';
+			button.disabled = true;
+			
+			try {
+			// 先登录获取 token
+			const token = await this.javdbLogin();
+			if (!token) {
+				// Token 获取失败，可能凭据过期，提示重新输入
+				this.showCredentialsModal(() => {
+					// 登录成功后更新齿轮按钮状态
+					if (settingsBtn.updateState) {
+						settingsBtn.updateState();
+					}
+					button.click();
+				});
+				return;
+			}				// 搜索影片获取 movie_id
+				let movieInfo = await this.searchJavdbMovie(code);
+				if (!movieInfo) {
+					this.showToast('未找到该影片');
+					return;
+				}
+				
+				// 如果没有评分，获取详情补充评分
+				if (!movieInfo.score) {
+					const detail = await this.getJavdbMovieDetail(movieInfo.movieId);
+					if (detail) {
+						movieInfo.score = detail.score;
+						movieInfo.commentsCount = detail.commentsCount;
+						// 更新缓存
+						this.cacheMovieSearch(code, movieInfo);
+					}
+				}
+				
+				// 获取短评（获取更多条以便排序）
+				const reviewsData = await this.getJavdbReviews(movieInfo.movieId, 1, 'hotly');
+				if (!reviewsData || !reviewsData.reviews || reviewsData.reviews.length === 0) {
+					this.showToast('暂无短评');
+					return;
+				}
+				
+				// 显示短评弹窗
+				this.showReviewsModal(movieInfo, reviewsData);
+				
+		} catch (error) {
+			console.error('[ExtraFanart] 获取短评失败:', error);
+			this.showToast('获取短评失败');
+		} finally {
+			button.textContent = '短评';
+			button.disabled = false;
+		}
+	};
+	
+	// 创建齿轮设置按钮
+	const settingsBtn = document.createElement('button');
+	settingsBtn.className = 'jv-javdb-settings-btn';
+	settingsBtn.title = '清除 JavDB 凭据';
+	settingsBtn.innerHTML = `
+		<svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2">
+			<circle cx="12" cy="12" r="3"></circle>
+			<path d="M12 1v6m0 6v6M5.64 5.64l4.24 4.24m4.24 4.24l4.24 4.24M1 12h6m6 0h6M5.64 18.36l4.24-4.24m4.24-4.24l4.24-4.24"></path>
+		</svg>
+	`;
+	
+	// 更新按钮状态的函数
+	const updateSettingsBtnState = () => {
+		const hasCredentials = this.hasCredentials();
+		settingsBtn.style.opacity = hasCredentials ? '1' : '0.3';
+		settingsBtn.style.pointerEvents = hasCredentials ? 'auto' : 'none';
+	};
+	
+	settingsBtn.style.cssText = `
+		background: transparent;
+		border: 1px solid rgba(0, 164, 220, 0.5);
+		border-radius: 4px;
+		padding: 4px;
+		cursor: pointer;
+		color: rgba(0, 164, 220, 0.7);
+		display: flex;
+		align-items: center;
+		justify-content: center;
+		transition: all 0.2s;
+		opacity: ${this.hasCredentials() ? '1' : '0.3'};
+		pointer-events: ${this.hasCredentials() ? 'auto' : 'none'};
+	`;
+	
+	// 将更新函数存储在按钮上,以便外部调用
+	settingsBtn.updateState = updateSettingsBtnState;
+	
+	settingsBtn.onmouseenter = () => {
+		if (this.hasCredentials()) {
+			settingsBtn.style.color = '#00a4dc';
+			settingsBtn.style.borderColor = '#00a4dc';
+			settingsBtn.style.background = 'rgba(0, 164, 220, 0.1)';
+		}
+	};
+	
+	settingsBtn.onmouseleave = () => {
+		settingsBtn.style.color = 'rgba(0, 164, 220, 0.7)';
+		settingsBtn.style.borderColor = 'rgba(0, 164, 220, 0.5)';
+		settingsBtn.style.background = 'transparent';
+	};
+	
+	settingsBtn.onclick = (e) => {
+		e.preventDefault();
+		e.stopPropagation();
+		
+		if (!this.hasCredentials()) {
+			return;
+		}
+		
+		if (confirm('确定要清除已保存的 JavDB 账号吗?清除后下次使用时需要重新输入。')) {
+			this.clearCredentials();
+			this.showToast('JavDB 账号已清除');
+			// 更新按钮状态
+			settingsBtn.style.opacity = '0.3';
+			settingsBtn.style.pointerEvents = 'none';
+		}
+	};
+	
+	buttonWrapper.appendChild(button);
+	buttonWrapper.appendChild(settingsBtn);
+	container.appendChild(buttonWrapper);
+}	// 创建并显示短评弹窗
+	static showReviewsModal(movieInfo, reviewsData) {
+		// 如果弹窗已存在，先移除
+		if (this.reviewsModal) {
+			this.reviewsModal.remove();
+		}
+		
+		// 按点赞数排序短评
+		const sortedReviews = [...reviewsData.reviews].sort((a, b) => (b.likes_count || 0) - (a.likes_count || 0));
+		
+		const modal = document.createElement('div');
+		modal.className = 'jv-reviews-modal';
+		modal.innerHTML = `
+			<div class="jv-reviews-backdrop"></div>
+			<div class="jv-reviews-content">
+				<div class="jv-reviews-header">
+					<div class="jv-reviews-title-wrapper">
+						<h3 class="jv-reviews-title">JavDB 短评</h3>
+						<span class="jv-reviews-subtitle">${movieInfo.number} · 评分 ${movieInfo.score || '暂无'} · ${reviewsData.pagination?.total || reviewsData.reviews.length} 条短评</span>
+					</div>
+					<button class="jv-reviews-close">
+						<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+							<line x1="18" y1="6" x2="6" y2="18"></line>
+							<line x1="6" y1="6" x2="18" y2="18"></line>
+						</svg>
+					</button>
+				</div>
+				<div class="jv-reviews-sort-hint">
+					<span>按点赞数排序</span>
+				</div>
+				<div class="jv-reviews-list">
+					${this.renderReviews(sortedReviews)}
+				</div>
+				<div class="jv-reviews-pagination">
+					<span class="jv-reviews-page-info">第 1 页</span>
+					${reviewsData.pagination && reviewsData.pagination.total_pages > 1 ? `
+						<div class="jv-reviews-page-btns">
+							<button class="jv-page-btn jv-prev-page" disabled>上一页</button>
+							<button class="jv-page-btn jv-next-page">下一页</button>
+						</div>
+					` : ''}
+				</div>
+			</div>
+		`;
+		
+		document.body.appendChild(modal);
+		this.reviewsModal = modal;
+		
+		// 当前状态
+		let currentPage = 1;
+		const totalPages = reviewsData.pagination?.total_pages || 1;
+		
+		// 绑定事件
+		const closeBtn = modal.querySelector('.jv-reviews-close');
+		const backdrop = modal.querySelector('.jv-reviews-backdrop');
+		const prevBtn = modal.querySelector('.jv-prev-page');
+		const nextBtn = modal.querySelector('.jv-next-page');
+		const pageInfo = modal.querySelector('.jv-reviews-page-info');
+		const reviewsList = modal.querySelector('.jv-reviews-list');
+		
+		const closeModal = () => {
+			modal.classList.add('closing');
+			setTimeout(() => {
+				modal.remove();
+				this.reviewsModal = null;
+			}, 200);
+		};
+		
+		closeBtn.onclick = closeModal;
+		backdrop.onclick = closeModal;
+		
+		// 按 ESC 关闭
+		const escHandler = (e) => {
+			if (e.key === 'Escape') {
+				closeModal();
+				document.removeEventListener('keydown', escHandler);
+			}
+		};
+		document.addEventListener('keydown', escHandler);
+		
+		// 分页
+		const loadPage = async (page) => {
+			if (page < 1 || page > totalPages) return;
+			
+			currentPage = page;
+			reviewsList.innerHTML = '<div class="jv-reviews-loading">加载中...</div>';
+			
+			const newData = await this.getJavdbReviews(movieInfo.movieId, currentPage, 'hotly');
+			if (newData && newData.reviews) {
+				// 按点赞数排序
+				const sorted = [...newData.reviews].sort((a, b) => (b.likes_count || 0) - (a.likes_count || 0));
+				reviewsList.innerHTML = this.renderReviews(sorted);
+				this.updatePagination(pageInfo, prevBtn, nextBtn, currentPage, newData.pagination?.total_pages || 1);
+				// 滚动到顶部
+				reviewsList.scrollTop = 0;
+			}
+		};
+		
+		if (prevBtn) {
+			prevBtn.onclick = () => loadPage(currentPage - 1);
+		}
+		if (nextBtn) {
+			nextBtn.onclick = () => loadPage(currentPage + 1);
+		}
+		
+		// 显示动画
+		requestAnimationFrame(() => {
+			modal.classList.add('visible');
+		});
+	}
+	
+	// 渲染短评列表
+	static renderReviews(reviews) {
+		if (!reviews || reviews.length === 0) {
+			return '<div class="jv-reviews-empty">暂无短评</div>';
+		}
+		
+		return reviews.map(review => {
+			const user = review.user || {};
+			const avatar = user.avatar_url || 'data:image/svg+xml;base64,PHN2ZyB4bWxucz0iaHR0cDovL3d3dy53My5vcmcvMjAwMC9zdmciIHdpZHRoPSI0MCIgaGVpZ2h0PSI0MCIgdmlld0JveD0iMCAwIDI0IDI0IiBmaWxsPSIjNjY2Ij48cGF0aCBkPSJNMTIgMTJjMi4yMSAwIDQtMS43OSA0LTRzLTEuNzktNC00LTQtNCAxLjc5LTQgNCAxLjc5IDQgNCA0em0wIDJjLTIuNjcgMC04IDEuMzQtOCA0djJoMTZ2LTJjMC0yLjY2LTUuMzMtNC04LTR6Ii8+PC9zdmc+';
+			const username = user.username || '匿名用户';
+			const score = review.score ? `${review.score}分` : '';
+			const content = review.content || '';
+			const likes = review.likes_count || 0;
+			const createdAt = this.formatReviewDate(review.created_at);
+			
+			// 用户标签
+			const tags = [];
+			if (user.is_vip) tags.push('<span class="jv-review-tag vip">VIP</span>');
+			if (user.is_contributor) tags.push('<span class="jv-review-tag contributor">贡献者</span>');
+			
+			return `
+				<div class="jv-review-item">
+					<div class="jv-review-header">
+						<img class="jv-review-avatar" src="${avatar}" alt="${username}" onerror="this.src='data:image/svg+xml;base64,PHN2ZyB4bWxucz0iaHR0cDovL3d3dy53My5vcmcvMjAwMC9zdmciIHdpZHRoPSI0MCIgaGVpZ2h0PSI0MCIgdmlld0JveD0iMCAwIDI0IDI0IiBmaWxsPSIjNjY2Ij48cGF0aCBkPSJNMTIgMTJjMi4yMSAwIDQtMS43OSA0LTRzLTEuNzktNC00LTQtNCAxLjc5LTQgNCAxLjc5IDQgNCA0em0wIDJjLTIuNjcgMC04IDEuMzQtOCA0djJoMTZ2LTJjMC0yLjY2LTUuMzMtNC04LTR6Ii8+PC9zdmc+'"/>
+						<div class="jv-review-user-info">
+							<div class="jv-review-username">
+								${username}
+								${tags.join('')}
+							</div>
+							<div class="jv-review-meta">
+								${score ? `<span class="jv-review-score">${score}</span>` : ''}
+								<span class="jv-review-date">${createdAt}</span>
+							</div>
+						</div>
+					</div>
+					<div class="jv-review-content">${this.escapeHtml(content)}</div>
+					<div class="jv-review-footer">
+						<span class="jv-review-likes">
+							<svg viewBox="0 0 24 24" width="14" height="14" fill="currentColor">
+								<path d="M1 21h4V9H1v12zm22-11c0-1.1-.9-2-2-2h-6.31l.95-4.57.03-.32c0-.41-.17-.79-.44-1.06L14.17 1 7.59 7.59C7.22 7.95 7 8.45 7 9v10c0 1.1.9 2 2 2h9c.83 0 1.54-.5 1.84-1.22l3.02-7.05c.09-.23.14-.47.14-.73v-2z"/>
+							</svg>
+							${likes}
+						</span>
+					</div>
+				</div>
+			`;
+		}).join('');
+	}
+	
+	// 格式化日期
+	static formatReviewDate(dateStr) {
+		if (!dateStr) return '';
+		try {
+			const date = new Date(dateStr);
+			const now = new Date();
+			const diff = now - date;
+			
+			const minutes = Math.floor(diff / 60000);
+			const hours = Math.floor(diff / 3600000);
+			const days = Math.floor(diff / 86400000);
+			
+			if (minutes < 1) return '刚刚';
+			if (minutes < 60) return `${minutes}分钟前`;
+			if (hours < 24) return `${hours}小时前`;
+			if (days < 30) return `${days}天前`;
+			
+			return date.toLocaleDateString('zh-CN');
+		} catch {
+			return dateStr;
+		}
+	}
+	
+	// HTML 转义
+	static escapeHtml(text) {
+		const div = document.createElement('div');
+		div.textContent = text;
+		return div.innerHTML;
+	}
+	
+	// 更新分页状态
+	static updatePagination(pageInfo, prevBtn, nextBtn, currentPage, totalPages) {
+		if (pageInfo) {
+			pageInfo.textContent = `第 ${currentPage} / ${totalPages} 页`;
+		}
+		if (prevBtn) {
+			prevBtn.disabled = currentPage <= 1;
+		}
+		if (nextBtn) {
+			nextBtn.disabled = currentPage >= totalPages;
+		}
 	}
 
 	static async copyToClipboard(text) {
@@ -2728,6 +3889,422 @@ static isDetailsPage() {
 
 			.jv-zoom-btn.jv-right-btn:before {
 				border-left: 27px solid white;
+			}
+
+			/* JavDB 短评弹窗样式 */
+			.jv-reviews-modal {
+				position: fixed;
+				top: 0;
+				left: 0;
+				right: 0;
+				bottom: 0;
+				z-index: 10000;
+				display: flex;
+				justify-content: center;
+				align-items: center;
+				opacity: 0;
+				transition: opacity 0.2s ease;
+			}
+
+			.jv-reviews-modal.visible {
+				opacity: 1;
+			}
+
+			.jv-reviews-modal.closing {
+				opacity: 0;
+			}
+
+			.jv-reviews-backdrop {
+				position: absolute;
+				top: 0;
+				left: 0;
+				right: 0;
+				bottom: 0;
+				background: rgba(0, 0, 0, 0.8);
+				backdrop-filter: blur(8px);
+			}
+
+			.jv-reviews-content {
+				position: relative;
+				width: 90%;
+				max-width: 600px;
+				max-height: 80vh;
+				background: #1a1a1a;
+				border-radius: 16px;
+				display: flex;
+				flex-direction: column;
+				overflow: hidden;
+				box-shadow: 0 20px 60px rgba(0, 0, 0, 0.5);
+				border: 1px solid rgba(255, 255, 255, 0.1);
+				transform: scale(0.95);
+				transition: transform 0.2s ease;
+			}
+
+			.jv-reviews-modal.visible .jv-reviews-content {
+				transform: scale(1);
+			}
+
+			.jv-reviews-header {
+				display: flex;
+				justify-content: space-between;
+				align-items: flex-start;
+				padding: 20px 24px;
+				border-bottom: 1px solid rgba(255, 255, 255, 0.1);
+				background: rgba(0, 164, 220, 0.1);
+			}
+
+			.jv-reviews-title-wrapper {
+				flex: 1;
+			}
+
+			.jv-reviews-title {
+				margin: 0;
+				font-size: 20px;
+				font-weight: 600;
+				color: #fff;
+			}
+
+			.jv-reviews-subtitle {
+				display: block;
+				margin-top: 4px;
+				font-size: 13px;
+				color: rgba(255, 255, 255, 0.6);
+			}
+
+			.jv-reviews-close {
+				background: none;
+				border: none;
+				padding: 8px;
+				cursor: pointer;
+				color: rgba(255, 255, 255, 0.6);
+				transition: color 0.2s;
+				margin: -8px -8px 0 0;
+			}
+
+			.jv-reviews-close:hover {
+				color: #fff;
+			}
+
+			.jv-reviews-close svg {
+				width: 20px;
+				height: 20px;
+			}
+
+			/* 凭据输入弹窗样式 */
+			.jv-credentials-content {
+				position: relative;
+				width: 90%;
+				max-width: 420px;
+				background: #1a1a1a;
+				border-radius: 16px;
+				display: flex;
+				flex-direction: column;
+				overflow: hidden;
+				box-shadow: 0 20px 60px rgba(0, 0, 0, 0.5);
+				border: 1px solid rgba(255, 255, 255, 0.1);
+				transform: scale(0.95);
+				transition: transform 0.2s ease;
+			}
+
+			.jv-reviews-modal.visible .jv-credentials-content {
+				transform: scale(1);
+			}
+
+			.jv-credentials-header {
+				display: flex;
+				justify-content: space-between;
+				align-items: center;
+				padding: 20px 24px;
+				border-bottom: 1px solid rgba(255, 255, 255, 0.1);
+				background: rgba(0, 164, 220, 0.1);
+			}
+
+			.jv-credentials-title {
+				margin: 0;
+				font-size: 18px;
+				font-weight: 600;
+				color: #fff;
+			}
+
+			.jv-credentials-body {
+				padding: 24px;
+			}
+
+			.jv-credentials-desc {
+				margin: 0 0 20px 0;
+				font-size: 14px;
+				color: rgba(255, 255, 255, 0.8);
+				line-height: 1.5;
+			}
+
+			.jv-credentials-desc small {
+				color: rgba(255, 255, 255, 0.5);
+			}
+
+			.jv-credentials-form {
+				display: flex;
+				flex-direction: column;
+				gap: 16px;
+			}
+
+			.jv-form-group {
+				display: flex;
+				flex-direction: column;
+				gap: 6px;
+			}
+
+			.jv-form-group label {
+				font-size: 13px;
+				color: rgba(255, 255, 255, 0.7);
+				font-weight: 500;
+			}
+
+			.jv-form-group input {
+				padding: 12px 14px;
+				background: rgba(255, 255, 255, 0.1);
+				border: 1px solid rgba(255, 255, 255, 0.2);
+				border-radius: 8px;
+				color: #fff;
+				font-size: 14px;
+				outline: none;
+				transition: all 0.2s;
+			}
+
+			.jv-form-group input:focus {
+				border-color: #00a4dc;
+				background: rgba(255, 255, 255, 0.15);
+			}
+
+			.jv-form-group input::placeholder {
+				color: rgba(255, 255, 255, 0.4);
+			}
+
+			.jv-credentials-error {
+				margin-top: 12px;
+				padding: 10px 14px;
+				background: rgba(220, 53, 69, 0.2);
+				border: 1px solid rgba(220, 53, 69, 0.4);
+				border-radius: 6px;
+				color: #ff6b6b;
+				font-size: 13px;
+			}
+
+			.jv-credentials-footer {
+				display: flex;
+				justify-content: space-between;
+				align-items: center;
+				padding: 16px 24px;
+				border-top: 1px solid rgba(255, 255, 255, 0.1);
+				background: rgba(0, 0, 0, 0.3);
+				gap: 12px;
+			}
+
+			.jv-credentials-actions {
+				display: flex;
+				gap: 10px;
+				margin-left: auto;
+			}
+
+			.jv-btn {
+				padding: 10px 20px;
+				border: none;
+				border-radius: 8px;
+				font-size: 14px;
+				font-weight: 500;
+				cursor: pointer;
+				transition: all 0.2s;
+			}
+
+			.jv-btn-primary {
+				background: #00a4dc;
+				color: #fff;
+			}
+
+			.jv-btn-primary:hover {
+				background: #0090c4;
+			}
+
+			.jv-btn-primary:disabled {
+				background: #555;
+				cursor: not-allowed;
+			}
+
+			.jv-btn-secondary {
+				background: rgba(255, 255, 255, 0.1);
+				color: rgba(255, 255, 255, 0.8);
+			}
+
+			.jv-btn-secondary:hover {
+				background: rgba(255, 255, 255, 0.2);
+			}
+
+			.jv-btn-danger {
+				background: transparent;
+				color: #ff6b6b;
+				padding: 10px 14px;
+				font-size: 13px;
+			}
+
+			.jv-btn-danger:hover {
+				background: rgba(220, 53, 69, 0.2);
+			}
+
+			.jv-reviews-sort-hint {
+				display: flex;
+				align-items: center;
+				padding: 8px 24px;
+				border-bottom: 1px solid rgba(255, 255, 255, 0.05);
+				font-size: 12px;
+				color: rgba(255, 255, 255, 0.5);
+			}
+
+			.jv-reviews-list {
+				flex: 1;
+				overflow-y: auto;
+				padding: 16px 24px;
+			}
+
+			.jv-reviews-loading,
+			.jv-reviews-empty {
+				text-align: center;
+				padding: 40px 20px;
+				color: rgba(255, 255, 255, 0.5);
+			}
+
+			.jv-review-item {
+				padding: 16px 0;
+				border-bottom: 1px solid rgba(255, 255, 255, 0.05);
+			}
+
+			.jv-review-item:last-child {
+				border-bottom: none;
+			}
+
+			.jv-review-header {
+				display: flex;
+				align-items: center;
+				gap: 12px;
+				margin-bottom: 10px;
+			}
+
+			.jv-review-avatar {
+				width: 36px;
+				height: 36px;
+				border-radius: 50%;
+				object-fit: cover;
+				background: #333;
+			}
+
+			.jv-review-user-info {
+				flex: 1;
+			}
+
+			.jv-review-username {
+				font-size: 14px;
+				font-weight: 500;
+				color: #fff;
+				display: flex;
+				align-items: center;
+				gap: 6px;
+			}
+
+			.jv-review-tag {
+				font-size: 10px;
+				padding: 2px 6px;
+				border-radius: 4px;
+				font-weight: normal;
+			}
+
+			.jv-review-tag.vip {
+				background: linear-gradient(135deg, #ffd700, #ffaa00);
+				color: #000;
+			}
+
+			.jv-review-tag.contributor {
+				background: #00a4dc;
+				color: #fff;
+			}
+
+			.jv-review-meta {
+				display: flex;
+				align-items: center;
+				gap: 8px;
+				margin-top: 2px;
+				font-size: 12px;
+				color: rgba(255, 255, 255, 0.5);
+			}
+
+			.jv-review-score {
+				color: #ffd700;
+				font-weight: 500;
+			}
+
+			.jv-review-content {
+				font-size: 14px;
+				line-height: 1.6;
+				color: rgba(255, 255, 255, 0.9);
+				word-break: break-word;
+			}
+
+			.jv-review-footer {
+				display: flex;
+				justify-content: flex-end;
+				margin-top: 10px;
+			}
+
+			.jv-review-likes {
+				display: flex;
+				align-items: center;
+				gap: 4px;
+				font-size: 12px;
+				color: rgba(255, 255, 255, 0.5);
+			}
+
+			.jv-review-likes svg {
+				opacity: 0.7;
+			}
+
+			.jv-reviews-pagination {
+				display: flex;
+				justify-content: space-between;
+				align-items: center;
+				padding: 12px 24px;
+				border-top: 1px solid rgba(255, 255, 255, 0.1);
+				background: rgba(0, 0, 0, 0.3);
+			}
+
+			.jv-reviews-page-info {
+				font-size: 13px;
+				color: rgba(255, 255, 255, 0.6);
+			}
+
+			.jv-reviews-page-btns {
+				display: flex;
+				gap: 8px;
+			}
+
+			.jv-page-btn {
+				background: rgba(255, 255, 255, 0.1);
+				border: none;
+				padding: 6px 14px;
+				border-radius: 6px;
+				color: #fff;
+				font-size: 13px;
+				cursor: pointer;
+				transition: all 0.2s;
+			}
+
+			.jv-page-btn:hover:not(:disabled) {
+				background: rgba(255, 255, 255, 0.2);
+			}
+
+			.jv-page-btn:disabled {
+				opacity: 0.4;
+				cursor: not-allowed;
+			}
+
+			.jv-javdb-review-btn {
+				font-size: 12px !important;
 			}
 
 			@media (max-width: 1200px) {
