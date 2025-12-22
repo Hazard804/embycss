@@ -3214,26 +3214,38 @@ static isDetailsPage() {
 		}
 		
 		return reviews.map(review => {
+			// 1. 改进的用户信息提取逻辑
 			const user = review.user || {};
-			const avatar = user.avatar_url || 'data:image/svg+xml;base64,PHN2ZyB4bWxucz0iaHR0cDovL3d3dy53My5vcmcvMjAwMC9zdmciIHdpZHRoPSI0MCIgaGVpZ2h0PSI0MCIgdmlld0JveD0iMCAwIDI0IDI0IiBmaWxsPSIjNjY2Ij48cGF0aCBkPSJNMTIgMTJjMi4yMSAwIDQtMS43OSA0LTRzLTEuNzktNC00LTQtNCAxLjc5LTQgNCAxLjc5IDQgNCA0em0wIDJjLTIuNjcgMC04IDEuMzQtOCA0djJoMTZ2LTJjMC0yLjY2LTUuMzMtNC04LTR6Ii8+PC9zdmc+';
-			const username = user.username || '匿名用户';
+			
+			// 尝试从多个可能的字段获取用户名
+			const username = user.username || 
+							 user.name || 
+							 review.user_name || 
+							 review.username || 
+							 '匿名用户';
+
+			// 尝试获取头像，增加默认占位图逻辑
+			const avatar = user.avatar_url || 
+						   review.user_avatar || 
+						   'data:image/svg+xml;base64,PHN2ZyB4bWxucz0iaHR0cDovL3d3dy53My5vcmcvMjAwMC9zdmciIHdpZHRoPSI0MCIgaGVpZ2h0PSI0MCIgdmlld0JveD0iMCAwIDI0IDI0IiBmaWxsPSIjNjY2Ij48cGF0aCBkPSJNMTIgMTJjMi4yMSAwIDQtMS43OSA0LTRzLTEuNzktNC00LTQtNCAxLjc5LTQgNCAxLjc5IDQgNCA0em0wIDJjLTIuNjcgMC04IDEuMzQtOCA0djJoMTZ2LTJjMC0yLjY2LTUuMzMtNC04LTR6Ii8+PC9zdmc+';
+			
 			const score = review.score ? `${review.score}分` : '';
 			const content = review.content || '';
 			const likes = review.likes_count || 0;
 			const createdAt = this.formatReviewDate(review.created_at);
 			
-			// 用户标签
+			// 用户标签（增加对 contributor 字段的容错）
 			const tags = [];
-			if (user.is_vip) tags.push('<span class="jv-review-tag vip">VIP</span>');
-			if (user.is_contributor) tags.push('<span class="jv-review-tag contributor">贡献者</span>');
+			if (user.is_vip || review.is_vip) tags.push('<span class="jv-review-tag vip">VIP</span>');
+			if (user.is_contributor || review.is_contributor) tags.push('<span class="jv-review-tag contributor">贡献者</span>');
 			
 			return `
 				<div class="jv-review-item">
 					<div class="jv-review-header">
-						<img class="jv-review-avatar" src="${avatar}" alt="${username}" onerror="this.src='data:image/svg+xml;base64,PHN2ZyB4bWxucz0iaHR0cDovL3d3dy53My5vcmcvMjAwMC9zdmciIHdpZHRoPSI0MCIgaGVpZ2h0PSI0MCIgdmlld0JveD0iMCAwIDI0IDI0IiBmaWxsPSIjNjY2Ij48cGF0aCBkPSJNMTIgMTJjMi4yMSAwIDQtMS43OSA0LTRzLTEuNzktNC00LTQtNCAxLjc5LTQgNCAxLjc5IDQgNCA0em0wIDJjLTIuNjcgMC04IDEuMzQtOCA0djJoMTZ2LTJjMC0yLjY2LTUuMzMtNC04LTR6Ii8+PC9zdmc+'"/>
+						<img class="jv-review-avatar" src="${avatar}" alt="${username}" onerror="this.src='data:image/svg+xml;base64,...'"/>
 						<div class="jv-review-user-info">
 							<div class="jv-review-username">
-								${username}
+								${this.escapeHtml(username)}
 								${tags.join('')}
 							</div>
 							<div class="jv-review-meta">
