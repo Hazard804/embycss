@@ -2989,8 +2989,28 @@ static isDetailsPage() {
 					button.click();
 				});
 				return;
-			}				// 搜索影片获取 movie_id
+			}				
+                
+                // 搜索影片获取 movie_id
 				let movieInfo = await this.searchJavdbMovie(code);
+
+                // ============================================================
+                // [新增逻辑开始]：针对 123abc-123 格式的重试机制
+                // ============================================================
+                if (!movieInfo) {
+                    // 正则检查：以数字开头，紧接着是字母 (不区分大小写)
+                    // 例如匹配 123abc-123 中的 123
+                    if (/^\d+[a-z]/i.test(code)) {
+                        // 去除开头的数字
+                        const retryCode = code.replace(/^\d+(?=[a-z])/i, '');
+                        console.log(`[ExtraFanart] 原番号 ${code} 未找到，尝试优化番号搜索: ${retryCode}`);
+                        movieInfo = await this.searchJavdbMovie(retryCode);
+                    }
+                }
+                // ============================================================
+                // [新增逻辑结束]
+                // ============================================================
+				
 				if (!movieInfo) {
 					this.showToast('未找到该影片');
 					return;
@@ -3002,8 +3022,9 @@ static isDetailsPage() {
 					if (detail) {
 						movieInfo.score = detail.score;
 						movieInfo.commentsCount = detail.commentsCount;
-						// 更新缓存
-						this.cacheMovieSearch(code, movieInfo);
+						// 更新缓存（注意：这里使用最后成功的代码进行缓存更新可能有歧义，但保持原逻辑即可）
+                        // 如果是重试成功的，建议用原始code还是retryCode缓存取决于你希望下次是否还走重试
+						this.cacheMovieSearch(code, movieInfo); 
 					}
 				}
 				
