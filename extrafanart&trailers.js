@@ -1348,14 +1348,29 @@ static isDetailsPage() {
 			</div>
 		`;
 		
-		card.onclick = () => {
-			// 跳转到详情页
-			if (typeof Emby !== 'undefined' && Emby.Page && Emby.Page.showItem) {
-				Emby.Page.showItem(item.Id);
+		// 根据图片宽高比动态调整显示方式
+		const img = card.querySelector('img');
+		if (img) {
+			const adjustImageFit = () => {
+				if (img.naturalWidth > 0 && img.naturalHeight > 0) {
+					const aspectRatio = img.naturalWidth / img.naturalHeight;
+					// 如果宽度 >= 高度（横版或正方形），使用 cover 放大
+					// 否则使用 contain 保持完整
+					if (aspectRatio >= 1) {
+						img.style.objectFit = 'cover';
+					} else {
+						img.style.objectFit = 'contain';
+					}
+				}
+			};
+			
+			// 图片加载完成时调整
+			if (img.complete) {
+				adjustImageFit();
 			} else {
-				window.location.hash = `#!/item?id=${item.Id}`;
+				img.addEventListener('load', adjustImageFit);
 			}
-		};
+		}
 		
 		return card;
 	}
@@ -3568,9 +3583,13 @@ static isDetailsPage() {
 
 			.jv-similar-card-image {
 				width: 100%;
-				height: 200px;
+				aspect-ratio: 16 / 9;
 				overflow: hidden;
 				position: relative;
+				display: flex;
+				align-items: center;
+				justify-content: center;
+				background: rgba(0, 0, 0, 0.5);
 			}
 
 			.jv-similar-card-image.has-trailer {
@@ -4889,6 +4908,30 @@ static isDetailsPage() {
 				<div class="jv-similar-card-year">${year}</div>
 			</div>
 		`;
+		
+		// 根据图片宽高比动态调整显示方式
+		const img = card.querySelector('img');
+		if (img) {
+			const adjustImageFit = () => {
+				if (img.naturalWidth > 0 && img.naturalHeight > 0) {
+					const aspectRatio = img.naturalWidth / img.naturalHeight;
+					// 如果宽度 >= 高度（横版或正方形），使用 cover 放大
+					// 否则使用 contain 保持完整
+					if (aspectRatio >= 1) {
+						img.style.objectFit = 'cover';
+					} else {
+						img.style.objectFit = 'contain';
+					}
+				}
+			};
+			
+			// 图片加载完成时调整
+			if (img.complete) {
+				adjustImageFit();
+			} else {
+				img.addEventListener('load', adjustImageFit);
+			}
+		}
 		
 		card.onclick = () => {
 			if (typeof Emby !== 'undefined' && Emby.Page && Emby.Page.showItem) {
