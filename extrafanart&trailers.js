@@ -8,6 +8,16 @@ class ExtraFanart {
 		// 启用后会在网络链接旁显示"短评"按钮，首次使用需要输入 JavDB 账号密码
 		// 账号密码会加密存储在浏览器本地，不会上传到任何服务器
 		this.enableJavdbReviews = true;
+		
+		// 是否启用相似影片功能（true=启用，false=禁用）
+		this.enableSimilarItems = true;
+		// 相似影片最多显示数量
+		this.maxSimilarItems = 20;
+		
+		// 是否启用演员其他作品功能（true=启用，false=禁用）
+		this.enableActorMoreItems = true;
+		// 演员其他作品最多显示数量（每个演员）
+		this.maxActorMoreItems = 20;
 		// ===================
 		
 		// JavDB API 相关
@@ -969,6 +979,12 @@ static isDetailsPage() {
 
 	// 相似影片功能
 	static async loadSimilarItems() {
+		// 检查是否启用相似影片功能
+		if (!this.enableSimilarItems) {
+			console.log('[ExtraFanart] 相似影片功能已禁用');
+			return;
+		}
+		
 		if (!this.itemId || typeof ApiClient === 'undefined') return;
 		
 		// 立即隐藏容器，避免显示旧内容或空白框
@@ -1007,7 +1023,7 @@ static isDetailsPage() {
 				}))
 				.sort((a, b) => a.sortKey - b.sortKey)
 				.map(entry => entry.item)
-				.slice(0, 24);
+				.slice(0, this.maxSimilarItems);
 			
 		// 保存加载时的 itemId，用于后续检查
 		const loadedItemId = this.itemId;
@@ -1345,7 +1361,23 @@ static isDetailsPage() {
 		
 		if (!scrollContainer || !grid || !leftBtn || !rightBtn) return;
 		
-		const scrollAmount = 400;
+		// 计算每次应该滚动的距离（一页显示的宽度）
+		const calculateScrollAmount = () => {
+			const cards = grid.querySelectorAll('.jv-similar-card');
+			if (cards.length === 0) return 400;
+			
+			const firstCard = cards[0];
+			const cardStyle = window.getComputedStyle(firstCard);
+			const cardWidth = firstCard.offsetWidth;
+			const marginRight = parseFloat(cardStyle.marginRight) || 0;
+			const cardWithMargin = cardWidth + marginRight;
+			
+			// 计算当前容器宽度内能显示几张卡片
+			const visibleCards = Math.floor(grid.clientWidth / cardWithMargin);
+			const scrollAmount = visibleCards * cardWithMargin;
+			
+			return Math.max(scrollAmount, cardWithMargin);
+		};
 		
 		const updateButtons = () => {
 			const scrollLeft = grid.scrollLeft;
@@ -1356,11 +1388,13 @@ static isDetailsPage() {
 		};
 		
 		leftBtn.onclick = () => {
+			const scrollAmount = calculateScrollAmount();
 			grid.scrollBy({ left: -scrollAmount, behavior: 'smooth' });
 			setTimeout(updateButtons, 300);
 		};
 		
 		rightBtn.onclick = () => {
+			const scrollAmount = calculateScrollAmount();
 			grid.scrollBy({ left: scrollAmount, behavior: 'smooth' });
 			setTimeout(updateButtons, 300);
 		};
@@ -4402,6 +4436,12 @@ static isDetailsPage() {
 
 	// 演员其他作品功能
 	static async loadActorMoreItems() {
+		// 检查是否启用演员作品功能
+		if (!this.enableActorMoreItems) {
+			console.log('[ExtraFanart] 演员其他作品功能已禁用');
+			return;
+		}
+		
 		if (!this.itemId || typeof ApiClient === 'undefined') return;
 		
 		// 立即隐藏所有演员容器，避免显示旧内容或空白框
@@ -4439,8 +4479,10 @@ static isDetailsPage() {
 			for (const actorName of actorNames) {
 				const moreItems = await this.getActorMovies(actorName, item.Id);
 				if (moreItems && moreItems.length > 0) {
-					actorsData.push({ actorName, items: moreItems });
-					console.log('[ExtraFanart]', actorName, '的作品数:', moreItems.length);
+					// 限制每个演员的作品数量
+					const limitedItems = moreItems.slice(0, this.maxActorMoreItems);
+					actorsData.push({ actorName, items: limitedItems });
+					console.log('[ExtraFanart]', actorName, '的作品数:', limitedItems.length);
 				}
 			}
 			
@@ -4834,7 +4876,23 @@ static isDetailsPage() {
 		
 		if (!scrollContainer || !grid || !leftBtn || !rightBtn) return;
 		
-		const scrollAmount = 400;
+		// 计算每次应该滚动的距离（一页显示的宽度）
+		const calculateScrollAmount = () => {
+			const cards = grid.querySelectorAll('.jv-similar-card');
+			if (cards.length === 0) return 400;
+			
+			const firstCard = cards[0];
+			const cardStyle = window.getComputedStyle(firstCard);
+			const cardWidth = firstCard.offsetWidth;
+			const marginRight = parseFloat(cardStyle.marginRight) || 0;
+			const cardWithMargin = cardWidth + marginRight;
+			
+			// 计算当前容器宽度内能显示几张卡片
+			const visibleCards = Math.floor(grid.clientWidth / cardWithMargin);
+			const scrollAmount = visibleCards * cardWithMargin;
+			
+			return Math.max(scrollAmount, cardWithMargin);
+		};
 		
 		const updateButtons = () => {
 			const scrollLeft = grid.scrollLeft;
@@ -4845,11 +4903,13 @@ static isDetailsPage() {
 		};
 		
 		leftBtn.onclick = () => {
+			const scrollAmount = calculateScrollAmount();
 			grid.scrollBy({ left: -scrollAmount, behavior: 'smooth' });
 			setTimeout(updateButtons, 300);
 		};
 		
 		rightBtn.onclick = () => {
+			const scrollAmount = calculateScrollAmount();
 			grid.scrollBy({ left: scrollAmount, behavior: 'smooth' });
 			setTimeout(updateButtons, 300);
 		};

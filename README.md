@@ -151,7 +151,7 @@ this.targetLibraryIds = ['abc123', 'def456'];
 **基本使用：**
 在媒体详情页自动显示剧照、预告片、相似影片、演员作品和 JavDB 短评（如果有内容）。
 
-**配置选项（脚本开头第3-6行）：**
+**配置选项（脚本开头第3-20行）：**
 
 ```javascript
 // 是否显示网络链接容器（番号搜索链接）
@@ -159,6 +159,16 @@ this.enableWebLinks = true;
 
 // 是否启用 JavDB 短评功能
 this.enableJavdbReviews = true;
+
+// 是否启用相似影片功能（true=启用，false=禁用）
+this.enableSimilarItems = true;
+// 相似影片最多显示数量（默认20部，可调整）
+this.maxSimilarItems = 20;
+
+// 是否启用演员其他作品功能（true=启用，false=禁用）
+this.enableActorMoreItems = true;
+// 演员其他作品最多显示数量（每个演员，默认20部，可调整）
+this.maxActorMoreItems = 20;
 ```
 
 **功能说明：**
@@ -178,7 +188,22 @@ this.enableJavdbReviews = true;
    - 生成 javdb、javbus、dmm 等网站的搜索链接
    - 设置 `enableWebLinks = false` 可隐藏
 
-4. **JavDB 短评**
+4. **相似影片推荐** ⭐ **新增可配置功能**
+   - 基于 Emby 推荐算法自动获取相关影片
+   - 设置 `enableSimilarItems = false` 可完全隐藏此功能
+   - 修改 `maxSimilarItems` 调整显示数量（默认20部，可设置1-50）
+   - 鼠标悬停自动播放预告片预览
+   - 支持智能滚动：自动计算当前视口能显示几部影片，点击按钮直接切换下一段
+
+5. **演员作品展示** ⭐ **新增可配置功能**
+   - 自动提取前3位主演
+   - 设置 `enableActorMoreItems = false` 可完全隐藏此功能
+   - 修改 `maxActorMoreItems` 调整每个演员的显示作品数（默认20部，可设置1-50）
+   - 展示演员的其他作品
+   - 鼠标悬停自动播放预告片预览
+   - 支持智能滚动：自动计算当前视口能显示几部影片，点击按钮直接切换下一段
+
+6. **JavDB 短评**
    - 点击"JavDB短评"按钮查看社区评论
    - 首次使用需输入 JavDB 账号密码
    - 凭据加密存储在本地浏览器，不会上传
@@ -186,10 +211,32 @@ this.enableJavdbReviews = true;
    - 短评按点赞数排序，支持分页浏览
    - 24小时智能缓存，减少API请求
 
-5. **相似影片 & 演员作品**
-   - 鼠标悬停自动播放预告片预览
-   - 悬停时显示全屏播放按钮
-   - 点击卡片跳转详情页
+**配置示例：**
+
+```javascript
+// 只显示剧照和预告片，隐藏相似影片和演员作品
+this.enableSimilarItems = false;
+this.enableActorMoreItems = false;
+
+// 相似影片显示最多30部
+this.maxSimilarItems = 30;
+
+// 演员作品每人最多显示10部
+this.maxActorMoreItems = 10;
+
+// 只隐藏相似影片，保留演员作品
+this.enableSimilarItems = false;
+this.enableActorMoreItems = true;
+```
+
+**智能滚动说明：** ⭐ **新增功能**
+
+相似影片和演员作品容器现已支持**自适应智能滚动**：
+- ✅ 自动计算当前屏幕宽度能显示几张卡片
+- ✅ 点击滚动按钮直接切换到下一个完整页面
+- ✅ 无需连续点击多次，大大提高用户体验
+- ✅ 自动适应窗口大小变化
+- ✅ 支持所有屏幕尺寸（桌面、平板、移动端）
 
 **JavDB 短评详细说明：**
 
