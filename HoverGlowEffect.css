@@ -1,0 +1,38 @@
+/* =======================================================
+   Emby 纯净版：鼠标移开即复原 (去除点击粘连)
+   ======================================================= */
+
+/* 1. 基础容器设置 */
+div.card.portraitCard .cardBox {
+    overflow: visible !important;
+    /* 关闭父级感应，防止文字区域触发 */
+    pointer-events: none; 
+}
+
+/* 2. 重新开启“图片”和“按钮层”的鼠标感应 */
+div.card.portraitCard .cardContent, 
+div.card.portraitCard .cardOverlayContainer {
+    pointer-events: auto !important;
+}
+
+/* 3. 触发逻辑：只保留 :hover，去掉了 :focus-within
+   这意味着点击按钮后，只要鼠标移走，效果就会消失，不会卡住 */
+div.card.portraitCard .cardBox:hover .cardContent {
+    transform: scale(1.05);
+    box-shadow: 0 0 0 3px #00a4dc !important;
+    border-radius: 6px !important;
+    z-index: 10 !important;
+}
+
+/* 4. 触发逻辑：同上，按钮层同步放大 */
+div.card.portraitCard .cardBox:hover .cardOverlayContainer {
+    transform: scale(1.05);
+    z-index: 20 !important; 
+    border-radius: 6px !important;
+}
+
+/* 5. 动画过渡 */
+div.card.portraitCard .cardContent,
+div.card.portraitCard .cardOverlayContainer {
+    transition: transform 0.25s cubic-bezier(0.175, 0.885, 0.32, 1.275), box-shadow 0.25s ease-in-out;
+}

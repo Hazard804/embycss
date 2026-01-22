@@ -69,6 +69,30 @@
 - 🔄 切换媒体或刷新页面后自动恢复速度
 - 💾 使用 localStorage 持久化存储
 - 🎯 支持精确到每个媒体项目的速度记忆
+- 🛡️ 防护机制：防止系统重置倍速为 1x
+- 🔧 兼容 Web 端和 Emby Theater 客户端
+
+**使用场景：**
+- 习惯看 1.25 倍速的用户
+- 喜欢加速看重复剧情
+- 节省时间的快速浏览
+
+### 5. HoverGlowEffect.css - 卡片悬停光晕效果
+
+为 Emby 卡片添加优雅的悬停放大和发光效果，鼠标移开即复原。
+
+**核心功能：**
+- ✨ 鼠标悬停时卡片平滑放大（1.05倍）
+- 🌟 发光边框效果（蓝色边框）
+- 🎬 鼠标移开立即复原，不会卡住
+- 🎨 流畅的 cubic-bezier 动画过渡（0.25s）
+- 📱 兼容所有 Emby 主题
+- 🖱️ 纯 CSS 实现，无性能影响
+
+**视觉效果：**
+- 悬停：卡片缩放 1.05 倍 + 蓝色发光边框（3px）
+- 离开：立即还原到原始状态
+- 动画：平滑过渡，视觉反馈清晰
 
 ## 🚀 快速开始
 
@@ -82,21 +106,35 @@
    - 访问 https://github.com/Shurelol/Emby.CustomCssJS
    - 按照说明安装该插件到您的 Emby 服务器
 
-2. **获取脚本**
+2. **获取脚本/样式**
    - 访问本仓库，选择需要的脚本
    - 复制脚本的完整代码
 
 3. **添加到 Emby**
    - 打开 Emby.CustomCssJS 管理界面
-   - 将脚本代码粘贴到自定义 JavaScript 区域
+   - **JavaScript 脚本**：粘贴到"自定义 JavaScript"区域
+   - **CSS 样式**（如 HoverGlowEffect.css）：粘贴到"自定义 CSS"区域
    - 可同时添加多个脚本
 
 4. **保存并生效**
    - 保存设置后刷新 Emby 页面即可看到效果
 
+**安装位置参考：**
+```
+Emby.CustomCssJS 管理界面
+├── 自定义 JavaScript（粘贴 *.js 文件）
+│   ├── HomeSwiper.js
+│   ├── extrafanart&trailers.js
+│   ├── DefaultMuteVolume.js
+│   └── RememberPlaybackSpeed.js
+└── 自定义 CSS（粘贴 *.css 文件）
+    └── HoverGlowEffect.css
+```
+
 **推荐组合：**
 - 基础组合：`extrafanart&trailers.js` + `DefaultMuteVolume.js`
-- 完整体验：`HomeSwiper.js` + `extrafanart&trailers.js` + `DefaultMuteVolume.js` + `RememberPlaybackSpeed.js`
+- 完整体验：`HomeSwiper.js` + `extrafanart&trailers.js` + `DefaultMuteVolume.js` + `RememberPlaybackSpeed.js` + `HoverGlowEffect.css`
+- 视觉增强：`extrafanart&trailers.js` + `HoverGlowEffect.css`（卡片视觉效果很棒）
 
 ## 📖 详细使用指南
 
@@ -285,9 +323,72 @@ this.enableActorMoreItems = true;
 **功能：**
 - 自动记住每个媒体的播放速度
 - 下次观看时自动恢复
+- 支持浏览器刷新和客户端重启
+- 多重保护机制防止系统重置倍速
 
 **使用：**
 安装后自动生效，调整播放速度后会自动保存。
+
+**工作原理：**
+1. 用户调整播放倍速（例如设为 1.5x）
+2. 脚本自动保存到浏览器本地
+3. 刷新页面或重新打开视频，倍速自动恢复为 1.5x
+4. 支持多个视频同时记忆（每个视频独立保存）
+
+**调试：**
+在浏览器控制台可查看工作状态：
+```javascript
+// 查看当前保存的倍速
+localStorage.getItem('emby_playback_speed');
+
+// 手动清除倍速记忆
+localStorage.removeItem('emby_playback_speed');
+```
+
+---
+
+### HoverGlowEffect.css - 卡片悬停光晕效果
+
+⚠️ **特殊说明**：此脚本为 **CSS 样式文件**，安装方式与其他脚本不同
+
+**使用方式：**
+1. 打开 Emby.CustomCssJS 管理界面
+2. **找到"自定义 CSS"区域**（不是 JavaScript）
+3. 复制 `HoverGlowEffect.css` 的全部内容到 CSS 区域
+4. **保存设置并刷新页面**
+
+❌ **不要**粘贴到 JavaScript 区域！
+
+**功能说明：**
+- 鼠标悬停时卡片平滑放大 1.05 倍
+- 添加蓝色发光边框（3px）
+- 0.25 秒平滑过渡动画
+- 鼠标移开即刻复原（不会卡住）
+- 纯 CSS 实现，零性能影响
+
+**效果预览：**
+```
+悬停前：卡片原始大小，无边框
+    ↓
+悬停中：卡片放大 1.05 倍 + 蓝色发光边框 + 动画过渡
+    ↓
+移开后：立即还原到原始状态
+```
+
+**自定义效果（可选）：**
+如果你想修改效果，可以编辑 CSS 中的以下参数：
+
+```css
+/* 修改放大倍数（默认 1.05） */
+transform: scale(1.05);  /* 改为 scale(1.1) 放大更多 */
+
+/* 修改边框颜色（默认蓝色） */
+box-shadow: 0 0 0 3px #00a4dc !important;  /* 改成你喜欢的颜色 */
+
+/* 修改动画时间（默认 0.25s） */
+transition: transform 0.25s cubic-bezier(0.175, 0.885, 0.32, 1.275), ...
+/* 改为 0.5s 会更慢 */
+```
 
 ## 🙏 鸣谢
 
