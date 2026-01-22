@@ -1,14 +1,17 @@
 ﻿/* =======================================================
-   Emby 全能版：支持海报(Portrait)和横图(Backdrop)
+   Emby 全能版：支持海报(Portrait)、横图(Backdrop)及方图(Square)
    功能：完美同步放大 + 蓝框 + 排除文字误触 + 按钮可点 + 不粘连
+   更新1：修复 MediaStreamPadder (详细信息卡片) 被误放大
+   更新2：新增对 SquareCard (正方形卡片) 的支持
    ======================================================= */
 
 /* -------------------------------------------------------
-   1. 基础容器设置 (针对竖图和横图)
+   1. 基础容器设置 
    ------------------------------------------------------- */
 div.card.portraitCard .cardBox,
+div.card.squareCard .cardBox,   /* 新增：方图 */
 div.card.backdropCard .cardBox,
-div.card.smallBackdropCard .cardBox { /* 额外支持了小尺寸横图 */
+div.card.smallBackdropCard .cardBox { 
     overflow: visible !important;
     /* 【核心】关闭父级感应，防止鼠标在文字区域触发放大 */
     pointer-events: none; 
@@ -19,6 +22,8 @@ div.card.smallBackdropCard .cardBox { /* 额外支持了小尺寸横图 */
    ------------------------------------------------------- */
 div.card.portraitCard .cardContent, 
 div.card.portraitCard .cardOverlayContainer,
+div.card.squareCard .cardContent,          /* 新增：方图内容 */
+div.card.squareCard .cardOverlayContainer, /* 新增：方图遮罩 */
 div.card.backdropCard .cardContent, 
 div.card.backdropCard .cardOverlayContainer,
 div.card.smallBackdropCard .cardContent, 
@@ -28,18 +33,19 @@ div.card.smallBackdropCard .cardOverlayContainer {
 
 /* -------------------------------------------------------
    3. 触发逻辑：图片放大
-   只要鼠标摸到了图片或按钮(触发了父级Hover)，就放大图片
    ------------------------------------------------------- */
-/* 竖向海报 */
-div.card.portraitCard .cardBox:hover .cardContent {
+/* 竖向海报 & 正方形卡片 (逻辑相同) */
+div.card.portraitCard .cardBox:hover .cardContent,
+div.card.squareCard .cardBox:hover .cardContent { /* 新增：方图触发 */
     transform: scale(1.05);
     box-shadow: 0 0 0 3px #00a4dc !important;
     border-radius: 6px !important;
     z-index: 10 !important;
 }
-/* 横向背景图 (Backdrop) */
-div.card.backdropCard .cardBox:hover .cardContent,
-div.card.smallBackdropCard .cardBox:hover .cardContent {
+
+/* 横向背景图 (Backdrop) - 排除文字信息卡片 */
+div.card.backdropCard .cardBox:hover .cardContent:not(.mediaStreamPadder),
+div.card.smallBackdropCard .cardBox:hover .cardContent:not(.mediaStreamPadder) {
     transform: scale(1.05);
     box-shadow: 0 0 0 3px #00a4dc !important;
     border-radius: 6px !important;
@@ -48,14 +54,15 @@ div.card.smallBackdropCard .cardBox:hover .cardContent {
 
 /* -------------------------------------------------------
    4. 触发逻辑：按钮层同步放大
-   必须跟图片保持一致的比例
    ------------------------------------------------------- */
-/* 竖向 */
-div.card.portraitCard .cardBox:hover .cardOverlayContainer {
+/* 竖向 & 正方形 */
+div.card.portraitCard .cardBox:hover .cardOverlayContainer,
+div.card.squareCard .cardBox:hover .cardOverlayContainer { /* 新增：方图触发 */
     transform: scale(1.05);
     z-index: 20 !important;
     border-radius: 6px !important;
 }
+
 /* 横向 */
 div.card.backdropCard .cardBox:hover .cardOverlayContainer,
 div.card.smallBackdropCard .cardBox:hover .cardOverlayContainer {
