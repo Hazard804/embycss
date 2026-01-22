@@ -171,6 +171,7 @@ class ExtraFanart {
 					</svg>
 					相似影片
 				</h2>
+				<span class="jv-similar-count"></span>
 			</div>
 			<div class="jv-similar-scroll-container">
 				<button class="jv-scroll-btn jv-scroll-left" style="display:none;">‹</button>
@@ -1184,6 +1185,12 @@ static isDetailsPage() {
 			const card = this.createSimilarCard(item);
 			gridContainer.appendChild(card);
 		});
+		
+		// 更新影片数量显示
+		const countElement = this.similarContainer.querySelector('.jv-similar-count');
+		if (countElement) {
+			countElement.textContent = `共 ${items.length} 部`;
+		}
 		
 		// 确保容器在正确的详情页DOM中
 		const detailPage = document.querySelector('#itemDetailPage:not(.hide), .itemView:not(.hide)');
@@ -3708,6 +3715,24 @@ static isDetailsPage() {
 				font-weight: 500;
 			}
 
+			.jv-similar-count {
+				font-size: 14px;
+				color: rgba(255, 255, 255, 0.6);
+				background: rgba(255, 255, 255, 0.1);
+				padding: 6px 14px;
+				border-radius: 20px;
+				font-weight: 500;
+			}
+
+			.jv-actor-count {
+				font-size: 14px;
+				color: rgba(255, 255, 255, 0.6);
+				background: rgba(255, 255, 255, 0.1);
+				padding: 6px 14px;
+				border-radius: 20px;
+				font-weight: 500;
+			}
+
 			.jv-images-grid {
 				display: grid;
 				grid-template-columns: repeat(auto-fill, minmax(280px, 1fr));
@@ -4481,8 +4506,10 @@ static isDetailsPage() {
 				if (moreItems && moreItems.length > 0) {
 					// 限制每个演员的作品数量
 					const limitedItems = moreItems.slice(0, this.maxActorMoreItems);
-					actorsData.push({ actorName, items: limitedItems });
-					console.log('[ExtraFanart]', actorName, '的作品数:', limitedItems.length);
+					// 随机排序演员的作品
+					const shuffledItems = limitedItems.sort(() => Math.random() - 0.5);
+					actorsData.push({ actorName, items: shuffledItems });
+					console.log('[ExtraFanart]', actorName, '的作品数:', shuffledItems.length);
 				}
 			}
 			
@@ -4571,10 +4598,9 @@ static isDetailsPage() {
 			
 			if (!result || !result.Items || result.Items.length === 0) return [];
 			
-			// 过滤掉当前影片，随机排序，取前24个（除非不足24）
+			// 过滤掉当前影片
 			let items = result.Items.filter(movie => movie.Id !== currentItemId);
-			items.sort(() => Math.random() - 0.5);
-			return items.slice(0, 24);
+			return items;
 			
 		} catch (error) {
 			console.error('[ExtraFanart] 获取演员影片失败:', error);
@@ -4645,6 +4671,7 @@ static isDetailsPage() {
 					</svg>
 					${actorName} 其他作品
 				</h2>
+				<span class="jv-actor-count"></span>
 			</div>
 			<div class="jv-actor-scroll-container">
 				<button class="jv-scroll-btn jv-scroll-left" style="display:none;">‹</button>
@@ -4661,6 +4688,12 @@ static isDetailsPage() {
 			const card = this.createActorCard(item);
 			gridContainer.appendChild(card);
 		});
+		
+		// 更新作品数量显示
+		const countElement = actorContainer.querySelector('.jv-actor-count');
+		if (countElement) {
+			countElement.textContent = `共 ${items.length} 部`;
+		}
 		
 		// 确保容器在正确的详情页DOM中
 		const detailPage = document.querySelector('#itemDetailPage:not(.hide), .itemView:not(.hide)');
