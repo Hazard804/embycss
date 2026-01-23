@@ -1525,7 +1525,7 @@ static isDetailsPage() {
 				reviewBtn.onclick = (e) => {
 					e.stopPropagation();
 					e.preventDefault();
-					this.handleReviewButtonClick(code);
+					this.handleReviewButtonClick(code, e.currentTarget);
 				};
 			}
 		}
@@ -2530,69 +2530,109 @@ static isDetailsPage() {
 	}
 	
 	// 处理卡片上的短评按钮点击事件
-	static async handleReviewButtonClick(code) {
-		// 检查是否有保存的凭据，如果没有则显示登录框
-		if (!this.hasCredentials()) {
-			this.showCredentialsModal(() => {
-				// 登录成功后再次调用
-				this.handleReviewButtonClick(code);
-			});
-			return;
-		}
+	static async handleReviewButtonClick(code, buttonElement) {
+		// 保存原始内容和宽度（在 try 块外，以便 finally 块能访问）
+		let originalText = '';
+		let originalMinWidth = '';
 		
 		try {
-			// 先登录获取 token
-			const token = await this.javdbLogin();
-			if (!token) {
-				// Token 获取失败，可能凭据过期，提示重新输入
+			// 如果提供了按钮元素，添加加载状态
+			if (buttonElement) {
+				originalText = buttonElement.textContent;
+				originalMinWidth = buttonElement.style.minWidth;
+				
+				// 锁定按钮宽度，添加 loading 类
+				buttonElement.style.minWidth = buttonElement.offsetWidth + 'px';
+				buttonElement.classList.add('loading');
+				
+				// 替换按钮内容为加载状态
+				buttonElement.innerHTML = '<span class="jv-btn-spinner"></span>';
+			}
+			
+			// 检查是否有保存的凭据，如果没有则显示登录框
+			if (!this.hasCredentials()) {
+				// 恢复按钮状态后再显示弹窗
+				if (buttonElement) {
+					buttonElement.classList.remove('loading');
+					buttonElement.textContent = originalText;
+					buttonElement.style.minWidth = originalMinWidth;
+				}
+				
 				this.showCredentialsModal(() => {
-					// 登录成功后再试一次
-					this.handleReviewButtonClick(code);
+					// 登录成功后再次调用
+					this.handleReviewButtonClick(code, buttonElement);
 				});
 				return;
 			}
-
-			// 搜索影片获取 movie_id
-			let movieInfo = await this.searchJavdbMovie(code);
-
-			// 如果未找到，尝试去除开头数字的重试机制
-			if (!movieInfo) {
-				if (/^\d+[a-z]/i.test(code)) {
-					const retryCode = code.replace(/^\d+(?=[a-z])/i, '');
-					console.log(`[ExtraFanart] 原番号 ${code} 未找到，尝试优化番号搜索: ${retryCode}`);
-					movieInfo = await this.searchJavdbMovie(retryCode);
-				}
-			}
-
-			if (!movieInfo) {
-				this.showToast(`未找到番号 ${code} 的影片信息`);
-				return;
-			}
-
-			// 如果没有评分，获取详情补充评分
-			if (!movieInfo.score) {
-				const detail = await this.getJavdbMovieDetail(movieInfo.movieId);
-				if (detail) {
-					movieInfo.score = detail.score;
-					movieInfo.commentsCount = detail.commentsCount;
-					this.cacheMovieSearch(code, movieInfo);
-				}
-			}
-
-			// 获取短评数据
-			const reviewsData = await this.getJavdbReviews(movieInfo.movieId, 1, 'hotly');
 			
-			// 检查是否有短评，没有则显示提示并返回
-			if (!reviewsData || !reviewsData.reviews || reviewsData.reviews.length === 0) {
-				this.showToast('暂无短评');
-				return;
-			}
+			try {
+				// 先登录获取 token
+				const token = await this.javdbLogin();
+				if (!token) {
+					// Token 获取失败，可能凭据过期，恢复按钮状态后提示重新输入
+					if (buttonElement) {
+						buttonElement.classList.remove('loading');
+						buttonElement.textContent = originalText;
+						buttonElement.style.minWidth = originalMinWidth;
+					}
+					
+					this.showCredentialsModal(() => {
+						// 登录成功后再试一次
+						this.handleReviewButtonClick(code, buttonElement);
+					});
+					return;
+				}
 
-			// 显示短评弹窗
-			this.showReviewsModal(movieInfo, reviewsData);
-		} catch (error) {
-			console.error('[ExtraFanart] 获取短评失败:', error);
-			this.showToast('获取短评失败，请稍后重试');
+				// 搜索影片获取 movie_id
+				let movieInfo = await this.searchJavdbMovie(code);
+
+				// 如果未找到，尝试去除开头数字的重试机制
+				if (!movieInfo) {
+					if (/^\d+[a-z]/i.test(code)) {
+						const retryCode = code.replace(/^\d+(?=[a-z])/i, '');
+						console.log(`[ExtraFanart] 原番号 ${code} 未找到，尝试优化番号搜索: ${retryCode}`);
+						movieInfo = await this.searchJavdbMovie(retryCode);
+					}
+				}
+
+				if (!movieInfo) {
+					this.showToast(`未找到番号 ${code} 的影片信息`);
+					return;
+				}
+
+				// 如果没有评分，获取详情补充评分
+				if (!movieInfo.score) {
+					const detail = await this.getJavdbMovieDetail(movieInfo.movieId);
+					if (detail) {
+						movieInfo.score = detail.score;
+						movieInfo.commentsCount = detail.commentsCount;
+						this.cacheMovieSearch(code, movieInfo);
+					}
+				}
+
+				// 获取短评数据
+				const reviewsData = await this.getJavdbReviews(movieInfo.movieId, 1, 'hotly');
+				
+				// 检查是否有短评，没有则显示提示并返回
+				if (!reviewsData || !reviewsData.reviews || reviewsData.reviews.length === 0) {
+					this.showToast('暂无短评');
+					return;
+				}
+
+				// 显示短评弹窗
+				this.showReviewsModal(movieInfo, reviewsData);
+			} catch (error) {
+				console.error('[ExtraFanart] 获取短评失败:', error);
+				this.showToast('获取短评失败，请稍后重试');
+				throw error; // 重新抛出以便最后的finally块处理
+			}
+		} finally {
+			// 无论成功与否，都恢复按钮状态
+			if (buttonElement && buttonElement.classList.contains('loading')) {
+				buttonElement.classList.remove('loading');
+				buttonElement.textContent = originalText;
+				buttonElement.style.minWidth = originalMinWidth;
+			}
 		}
 	}
 	
@@ -4782,6 +4822,43 @@ static isDetailsPage() {
 				font-size: 12px !important;
 			}
 
+			@keyframes jv-spin {
+				0% { transform: rotate(0deg); }
+				100% { transform: rotate(360deg); }
+			}
+
+			.jv-btn-spinner {
+				display: inline-block;
+				width: 12px;
+				height: 12px;
+				border: 2px solid rgba(255, 255, 255, 0.3);
+				border-radius: 50%;
+				border-top-color: #fff;
+				animation: jv-spin 0.8s linear infinite;
+			}
+
+			.jv-card-review-btn.loading {
+				cursor: not-allowed !important;
+				opacity: 0.8;
+				background: linear-gradient(135deg, rgba(0, 164, 220, 0.8), rgba(0, 200, 255, 0.6));
+				pointer-events: none;
+				display: inline-flex !important;
+				align-items: center;
+				justify-content: center;
+				min-width: 48px;
+			}
+
+			.jv-reviews-content {
+				transform: scale(0.95);
+				transition: transform 0.3s cubic-bezier(0.34, 1.56, 0.64, 1), opacity 0.2s ease;
+				opacity: 0;
+			}
+
+			.jv-reviews-modal.visible .jv-reviews-content {
+				transform: scale(1);
+				opacity: 1;
+			}
+
 			@media (max-width: 1200px) {
 				.jv-images-grid {
 					grid-template-columns: repeat(auto-fill, minmax(240px, 1fr));
@@ -5301,7 +5378,7 @@ static isDetailsPage() {
 				reviewBtn.onclick = (e) => {
 					e.stopPropagation();
 					e.preventDefault();
-					this.handleReviewButtonClick(code);
+					this.handleReviewButtonClick(code, e.currentTarget);
 				};
 			}
 		}
