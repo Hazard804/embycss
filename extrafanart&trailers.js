@@ -1008,7 +1008,7 @@ static isDetailsPage() {
 				Limit: 50,
 				UserId: ApiClient.getCurrentUserId(),
 				ImageTypeLimit: 1,
-				Fields: "BasicSyncInfo,CanDelete,PrimaryImageAspectRatio,ProductionYear,Status,EndDate,LocalTrailerCount,RemoteTrailers",
+				Fields: "BasicSyncInfo,CanDelete,PrimaryImageAspectRatio,ProductionYear,Status,EndDate,LocalTrailerCount,RemoteTrailers,RunTimeTicks,CommunityRating",
 				EnableTotalRecordCount: false
 			};
 			
@@ -1334,8 +1334,24 @@ static isDetailsPage() {
 		
 		const year = item.ProductionYear || '';
 		const name = item.Name || '';
+		const runTime = this.formatRunTime(item.RunTimeTicks);
+		const rating = item.CommunityRating ? item.CommunityRating.toFixed(1) : '';
+		const code = this.extractCodeFromTitle(name);
+		
 		// 使用 RemoteTrailers 判断是否有预告片
 		const hasTrailer = (item.RemoteTrailers && item.RemoteTrailers.length > 0) || (item.LocalTrailerCount || 0) > 0;
+		
+		// 构建元数据字符串：年份 | 时长 | ⭐️评分
+		let metadataStr = year;
+		if (runTime) {
+			metadataStr = metadataStr ? `${metadataStr} · ${runTime}` : runTime;
+		}
+		if (rating) {
+			metadataStr = metadataStr ? `${metadataStr} · ★ ${rating}` : `★ ${rating}`;
+		}
+		
+		// 构建短评按钮的 HTML（仅当能够提取到番号时）
+		const reviewBtnHtml = code ? `<button class="jv-card-review-btn" data-code="${code}" title="查看 JavDB 短评">短评</button>` : '';
 		
 		card.innerHTML = `
 			<div class="jv-similar-card-image ${hasTrailer ? 'has-trailer' : ''}">
@@ -1344,9 +1360,24 @@ static isDetailsPage() {
 			</div>
 			<div class="jv-similar-card-info">
 				<div class="jv-similar-card-name" title="${name}">${name}</div>
-				<div class="jv-similar-card-year">${year}</div>
+				<div class="jv-card-footer">
+					${metadataStr ? `<div class="jv-card-metadata">${metadataStr}</div>` : ''}
+					${reviewBtnHtml}
+				</div>
 			</div>
 		`;
+		
+		// 为短评按钮绑定点击事件
+		if (code) {
+			const reviewBtn = card.querySelector('.jv-card-review-btn');
+			if (reviewBtn) {
+				reviewBtn.onclick = (e) => {
+					e.stopPropagation();
+					e.preventDefault();
+					this.handleReviewButtonClick(code);
+				};
+			}
+		}
 		
 		// 根据图片宽高比动态调整显示方式
 		const img = card.querySelector('img');
@@ -2270,6 +2301,120 @@ static isDetailsPage() {
 		this.javdbToken = null;
 		this.javdbTokenExpiry = null;
 		console.log('[ExtraFanart] JavDB 凭据已清除');
+	}
+	
+	// 将 Emby 的 ticks (100纳秒单位) 转换为格式化的时长字符串
+	static formatRunTime(ticks) {
+		if (!ticks || typeof ticks !== 'number' || ticks <= 0) {
+			return '';
+		}
+		
+		// Emby 的 ticks 是以 100 纳秒为单位
+		// 转换为秒：ticks / 10,000,000
+		const totalSeconds = Math.round(ticks / 10000000);
+		const hours = Math.floor(totalSeconds / 3600);
+		const minutes = Math.floor((totalSeconds % 3600) / 60);
+		
+		if (hours > 0) {
+			return `${hours}h ${minutes}m`;
+		} else if (minutes > 0) {
+			return `${minutes}m`;
+		}
+		
+		return '';
+	}
+	
+	// 从标题中提取番号（支持 [ABC-123] 和 ABC-123 格式）
+	static extractCodeFromTitle(title) {
+		if (!title || typeof title !== 'string') {
+			return null;
+		}
+		
+		const titleText = title.trim();
+		
+		// 方式1：从方括号内提取番号：[ABC-123]
+		const bracketMatch = titleText.match(/\[([^\]]+)\]/);
+		if (bracketMatch && bracketMatch[1]) {
+			return bracketMatch[1];
+		}
+		
+		// 方式2：回退方案 - 提取第一个空格之前的内容作为番号
+		const spaceIndex = titleText.indexOf(' ');
+		if (spaceIndex > 0) {
+			const potentialCode = titleText.slice(0, spaceIndex).trim();
+			if (potentialCode) {
+				return potentialCode;
+			}
+		}
+		
+		return null;
+	}
+	
+	// 处理卡片上的短评按钮点击事件
+	static async handleReviewButtonClick(code) {
+		// 检查是否有保存的凭据，如果没有则显示登录框
+		if (!this.hasCredentials()) {
+			this.showCredentialsModal(() => {
+				// 登录成功后再次调用
+				this.handleReviewButtonClick(code);
+			});
+			return;
+		}
+		
+		try {
+			// 先登录获取 token
+			const token = await this.javdbLogin();
+			if (!token) {
+				// Token 获取失败，可能凭据过期，提示重新输入
+				this.showCredentialsModal(() => {
+					// 登录成功后再试一次
+					this.handleReviewButtonClick(code);
+				});
+				return;
+			}
+
+			// 搜索影片获取 movie_id
+			let movieInfo = await this.searchJavdbMovie(code);
+
+			// 如果未找到，尝试去除开头数字的重试机制
+			if (!movieInfo) {
+				if (/^\d+[a-z]/i.test(code)) {
+					const retryCode = code.replace(/^\d+(?=[a-z])/i, '');
+					console.log(`[ExtraFanart] 原番号 ${code} 未找到，尝试优化番号搜索: ${retryCode}`);
+					movieInfo = await this.searchJavdbMovie(retryCode);
+				}
+			}
+
+			if (!movieInfo) {
+				this.showToast(`未找到番号 ${code} 的影片信息`);
+				return;
+			}
+
+			// 如果没有评分，获取详情补充评分
+			if (!movieInfo.score) {
+				const detail = await this.getJavdbMovieDetail(movieInfo.movieId);
+				if (detail) {
+					movieInfo.score = detail.score;
+					movieInfo.commentsCount = detail.commentsCount;
+					this.cacheMovieSearch(code, movieInfo);
+				}
+			}
+
+			// 获取短评数据
+			const reviewsData = await this.getJavdbReviews(movieInfo.movieId, 1, 'hotly');
+			
+			// 检查是否有短评，没有则显示提示并返回
+			if (!reviewsData || !reviewsData.reviews || reviewsData.reviews.length === 0) {
+				this.showToast('暂无短评');
+				return;
+			}
+
+			// 显示短评弹窗
+			this.showReviewsModal(movieInfo, reviewsData);
+		} catch (error) {
+			console.error('[ExtraFanart] 获取短评失败:', error);
+			this.showToast('获取短评失败，请稍后重试');
+		}
 	}
 	
 	// 检查是否有已保存的凭据
@@ -3634,33 +3779,73 @@ static isDetailsPage() {
 
 			.jv-similar-card-info {
 				padding: 12px;
+				display: flex;
+				flex-direction: column;
+				gap: 8px;
 			}
 
 			.jv-similar-card-name {
 				font-size: 14px;
 				font-weight: 500;
 				color: #ffffff;
-				margin-bottom: 4px;
 				overflow: hidden;
 				text-overflow: ellipsis;
 				white-space: nowrap;
 			}
 
-			.jv-similar-card-year {
-				font-size: 12px;
-				color: rgba(255, 255, 255, 0.6);
-			}
+		.jv-card-footer {
+			display: flex;
+			align-items: center;
+			justify-content: space-between;
+			gap: 8px;
+		}
 
-			.jv-copy-code {
-				display: inline-block;
-				padding: 2px 6px;
-				background: rgba(173, 216, 230, 0.1);
-				border-radius: 4px;
-				transition: all 0.2s ease;
-			}
+		.jv-card-metadata {
+			font-size: 11px;
+			color: rgba(255, 255, 255, 0.6);
+			flex-shrink: 0;
+		}
 
-			.jv-copy-code:hover {
-				background: rgba(173, 216, 230, 0.2);
+		.jv-card-review-btn {
+			padding: 4px 10px;
+			background: linear-gradient(135deg, rgba(0, 164, 220, 0.8), rgba(0, 200, 255, 0.6));
+			border: 1px solid rgba(0, 164, 220, 0.6);
+			border-radius: 12px;
+			color: #ffffff;
+			font-size: 11px;
+			font-weight: 600;
+			cursor: pointer;
+			transition: all 0.2s ease;
+			outline: none;
+			white-space: nowrap;
+			flex-shrink: 0;
+		}
+
+		.jv-card-review-btn:hover {
+			background: linear-gradient(135deg, rgba(0, 164, 220, 1), rgba(0, 200, 255, 0.8));
+			box-shadow: 0 4px 12px rgba(0, 164, 220, 0.4);
+			transform: translateY(-2px);
+		}
+
+		.jv-card-review-btn:active {
+			transform: translateY(0);
+			box-shadow: 0 2px 6px rgba(0, 164, 220, 0.3);
+		}
+
+		.jv-similar-card-year {
+			display: none;
+		}
+
+		.jv-copy-code {
+			display: inline-block;
+			padding: 2px 6px;
+			background: rgba(173, 216, 230, 0.1);
+			border-radius: 4px;
+			transition: all 0.2s ease;
+		}
+
+		.jv-copy-code:hover {
+			background: rgba(173, 216, 230, 0.2);
 				transform: scale(1.05);
 			}
 
@@ -4610,7 +4795,7 @@ static isDetailsPage() {
 			const result = await ApiClient.getItems(ApiClient.getCurrentUserId(), {
 				Recursive: true,
 				IncludeItemTypes: 'Movie',
-				Fields: 'ProductionYear,PrimaryImageAspectRatio,RemoteTrailers,LocalTrailerCount',
+				Fields: 'ProductionYear,PrimaryImageAspectRatio,RemoteTrailers,LocalTrailerCount,RunTimeTicks,CommunityRating',
 				Person: actorName,
 				Limit: 100
 			});
@@ -4895,8 +5080,24 @@ static isDetailsPage() {
 		
 		const year = item.ProductionYear || '';
 		const name = item.Name || '';
+		const runTime = this.formatRunTime(item.RunTimeTicks);
+		const rating = item.CommunityRating ? item.CommunityRating.toFixed(1) : '';
+		const code = this.extractCodeFromTitle(name);
+		
 		// 使用 RemoteTrailers 判断是否有预告片
 		const hasTrailer = (item.RemoteTrailers && item.RemoteTrailers.length > 0) || (item.LocalTrailerCount || 0) > 0;
+		
+		// 构建元数据字符串：年份 | 时长 | ⭐️评分
+		let metadataStr = year;
+		if (runTime) {
+			metadataStr = metadataStr ? `${metadataStr} · ${runTime}` : runTime;
+		}
+		if (rating) {
+			metadataStr = metadataStr ? `${metadataStr} · ★ ${rating}` : `★ ${rating}`;
+		}
+		
+		// 构建短评按钮的 HTML（仅当能够提取到番号时）
+		const reviewBtnHtml = code ? `<button class="jv-card-review-btn" data-code="${code}" title="查看 JavDB 短评">短评</button>` : '';
 		
 		card.innerHTML = `
 			<div class="jv-similar-card-image ${hasTrailer ? 'has-trailer' : ''}">
@@ -4905,9 +5106,24 @@ static isDetailsPage() {
 			</div>
 			<div class="jv-similar-card-info">
 				<div class="jv-similar-card-name" title="${name}">${name}</div>
-				<div class="jv-similar-card-year">${year}</div>
+				<div class="jv-card-footer">
+					${metadataStr ? `<div class="jv-card-metadata">${metadataStr}</div>` : ''}
+					${reviewBtnHtml}
+				</div>
 			</div>
 		`;
+		
+		// 为短评按钮绑定点击事件
+		if (code) {
+			const reviewBtn = card.querySelector('.jv-card-review-btn');
+			if (reviewBtn) {
+				reviewBtn.onclick = (e) => {
+					e.stopPropagation();
+					e.preventDefault();
+					this.handleReviewButtonClick(code);
+				};
+			}
+		}
 		
 		// 根据图片宽高比动态调整显示方式
 		const img = card.querySelector('img');
