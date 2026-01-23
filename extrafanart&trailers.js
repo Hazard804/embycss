@@ -65,7 +65,93 @@ class ExtraFanart {
 		this.injectStyles();
 		this.init();
 	}
+	// ===== 性能优化：防抖和节流工具 =====
+	static debounce(func, delay) {
+		let timeoutId;
+		return function(...args) {
+			clearTimeout(timeoutId);
+			timeoutId = setTimeout(() => func.apply(this, args), delay);
+		};
+	}
 
+	static throttle(func, limit) {
+		let lastFunc;
+		let lastRan;
+		return function(...args) {
+			if (!lastRan) {
+				func.apply(this, args);
+				lastRan = Date.now();
+			} else {
+				clearTimeout(lastFunc);
+				lastFunc = setTimeout(() => {
+					if ((Date.now() - lastRan) >= limit) {
+						func.apply(this, args);
+						lastRan = Date.now();
+					}
+				}, Math.max(limit - (Date.now() - lastRan), 0));
+			}
+		};
+	}
+
+	// ===== MutationObserver 工具 =====
+	static observeElementAppear(targetSelector, callback, options = {}) {
+		const {
+			parentSelector = 'body',
+			timeout = 30000,
+			subtree = true,
+			attributes = false,
+			childList = true,
+			characterData = false
+		} = options;
+
+		// 在顶部显式声明 timeoutId，避免 ReferenceError
+		let timeoutId = null;
+
+		const observer = new MutationObserver(() => {
+			const element = document.querySelector(targetSelector);
+			if (element) {
+				observer.disconnect();
+				if (timeoutId) {
+					clearTimeout(timeoutId);
+				}
+				callback(element);
+			}
+		});
+
+		const parentElement = document.querySelector(parentSelector) || document.body;
+		
+		observer.observe(parentElement, {
+			childList,
+			subtree,
+			attributes,
+			characterData
+		});
+
+		// 设置超时，防止无限监听
+		timeoutId = setTimeout(() => {
+			observer.disconnect();
+			console.log('[ExtraFanart] MutationObserver 超时:', targetSelector);
+		}, timeout);
+
+		// 立即检查一次，如果元素已存在
+		const element = document.querySelector(targetSelector);
+		if (element) {
+			observer.disconnect();
+			if (timeoutId) {
+				clearTimeout(timeoutId);
+			}
+			callback(element);
+			// 如果元素已存在，返回空函数
+			return () => {};
+		}
+
+		return () => {
+			observer.disconnect();
+			if (timeoutId) {
+				clearTimeout(timeoutId);
+			}
+		};
+	}
 	static getCurrentItemId() {
 		return location.hash.match(/id\=(\w+)/)?.[1] ?? null;
 	}
@@ -206,9 +292,14 @@ class ExtraFanart {
 	}
 
 	static calculateFitSize(naturalWidth, naturalHeight) {
+		// 避免在循环中重复读取 DOM 属性（Layout Thrashing）
+		// 一次性读取所有需要的值
+		const maskClientWidth = this.zoomedMask.clientWidth;
+		const maskClientHeight = this.zoomedMask.clientHeight;
+		
 		// 获取可用空间，留出边距
-		const maxWidth = this.zoomedMask.clientWidth * 0.9;
-		const maxHeight = this.zoomedMask.clientHeight * 0.9;
+		const maxWidth = maskClientWidth * 0.9;
+		const maxHeight = maskClientHeight * 0.9;
 		
 		// 计算缩放比例，允许放大和缩小以适应窗口
 		const widthRatio = maxWidth / naturalWidth;
@@ -423,8 +514,52 @@ class ExtraFanart {
 		}
 		
 		if (!anchorElement) {
-			// 延迟重试，因为页面可能还在加载
-			setTimeout(() => this.showContainer(imageCount), 200);
+			// 使用 MutationObserver 监听锚点元素出现，而不是递归轮询
+			console.log('[ExtraFanart] 未找到锚点元素，使用 MutationObserver 监听...');
+			
+			const detailPageSelectors = [
+				'#itemDetailPage:not(.hide)',
+				'.itemView:not(.hide)'
+			];
+			
+			let detailPageParent = null;
+			for (const selector of detailPageSelectors) {
+				detailPageParent = document.querySelector(selector);
+				if (detailPageParent) break;
+			}
+			
+			if (!detailPageParent) {
+				console.log('[ExtraFanart] 详情页不存在，监听详情页出现...');
+				detailPageParent = document.body;
+			}
+			
+			// 使用 MutationObserver 替代递归 setTimeout
+			this.observeElementAppear(
+				'#itemDetailPage:not(.hide) #castCollapsible, .itemView:not(.hide) .peopleSection',
+				(element) => {
+					console.log('[ExtraFanart] 通过 MutationObserver 找到锚点元素');
+					const realAnchor = element.closest('#castCollapsible, .peopleSection');
+					if (realAnchor) {
+						this.insertContainerAfterAnchor(imageCount, realAnchor);
+					}
+				},
+				{
+					parentSelector: detailPageParent === document.body ? 'body' : undefined,
+					timeout: 15000, // 15秒超时
+					subtree: true,
+					childList: true
+				}
+			);
+			return;
+		}
+		
+		this.insertContainerAfterAnchor(imageCount, anchorElement);
+	}
+
+	static insertContainerAfterAnchor(imageCount, anchorElement) {
+		// 检查是否还在详情页
+		if (!this.isDetailsPage()) {
+			console.log('[ExtraFanart] 已离开详情页，取消显示剧照容器');
 			return;
 		}
 		
@@ -819,6 +954,19 @@ static isDetailsPage() {
 	}
 
 	static registerEventListeners() {
+		// ===== 防抖和节流处理 =====
+		// 使用 requestAnimationFrame 包装 handleResize，避免频繁调用
+		let resizeRAFId = null;
+		const debouncedHandleResize = () => {
+			if (resizeRAFId) {
+				cancelAnimationFrame(resizeRAFId);
+			}
+			resizeRAFId = requestAnimationFrame(() => {
+				this.handleResize();
+				resizeRAFId = null;
+			});
+		};
+		
 		// 监听页面显示事件（页面内导航）
 		document.addEventListener('viewshow', () => {
 			if (!ExtraFanart.isLoading) {
@@ -853,7 +1001,10 @@ static isDetailsPage() {
 		}
 		
 		document.addEventListener('keydown', (e) => this.handleKeydown(e));
-		window.addEventListener('resize', () => this.handleResize());
+		
+		// 使用 requestAnimationFrame 节流 resize 事件
+		window.addEventListener('resize', debouncedHandleResize);
+		
 		this.leftButton.addEventListener('click', (e) => this.handleLeftButtonClick(e));
 		this.rightButton.addEventListener('click', (e) => this.handleRightButtonClick(e));
 		this.zoomedMask.addEventListener('click', () => this.hideZoomedMask());
@@ -1092,7 +1243,7 @@ static isDetailsPage() {
 			gridContainer.innerHTML = '';
 		}
 		
-		// 重新创建图片元素
+		// 使用 DocumentFragment 避免多次重排
 		const imageFragment = document.createDocumentFragment();
 		
 		// 如果有预告片，先添加预告片
@@ -1179,12 +1330,13 @@ static isDetailsPage() {
 		gridContainer.innerHTML = '';
 		console.log('[ExtraFanart] 清空相似影片容器，准备添加', items.length, '个影片');
 		
-		// 添加内容到容器（此时容器仍然隐藏）
-		
+		// 使用 DocumentFragment 批量添加内容，避免多次重排
+		const fragment = document.createDocumentFragment();
 		items.forEach(item => {
 			const card = this.createSimilarCard(item);
-			gridContainer.appendChild(card);
+			fragment.appendChild(card);
 		});
+		gridContainer.appendChild(fragment);
 		
 		// 更新影片数量显示
 		const countElement = this.similarContainer.querySelector('.jv-similar-count');
@@ -1208,16 +1360,46 @@ static isDetailsPage() {
 			this.similarContainer.parentNode.removeChild(this.similarContainer);
 		}
 		
-		// 找到剧照容器或原剧照容器应在的位置并插入相似影片
-		const detailPageForInsert = document.querySelector('#itemDetailPage:not(.hide), .itemView:not(.hide)');
-		const imageContainer = detailPageForInsert ? detailPageForInsert.querySelector('#jv-image-container') : null;
-		const actorContainer = detailPageForInsert ? detailPageForInsert.querySelector('#jv-actor-container') : null;
+		// 使用 MutationObserver 等待剧照容器或插入位置出现
+		const imageContainer = detailPage ? detailPage.querySelector('#jv-image-container') : null;
+		const actorContainer = detailPage ? detailPage.querySelector('#jv-actor-container') : null;
 		
-		console.log('[ExtraFanart] 相似影片插入位置检查:', {
-			hasDetailPage: !!detailPageForInsert,
-			hasImageContainer: !!imageContainer,
-			hasActorContainer: !!actorContainer
-		});
+		if (imageContainer && document.body.contains(imageContainer)) {
+			// 如果有剧照容器，直接使用
+			this.insertSimilarContainerAfterImageOrActor(imageContainer, actorContainer, detailPage);
+		} else {
+			// 使用 MutationObserver 等待剧照容器出现
+			console.log('[ExtraFanart] 等待剧照容器出现...');
+			this.observeElementAppear(
+				'#jv-image-container',
+				(imageElem) => {
+					console.log('[ExtraFanart] 剧照容器已出现，插入相似影片');
+					const detailPageCheck = document.querySelector('#itemDetailPage:not(.hide), .itemView:not(.hide)');
+					const actorCheck = detailPageCheck ? detailPageCheck.querySelector('#jv-actor-container') : null;
+					if (this.itemId && detailPageCheck) {
+						this.insertSimilarContainerAfterImageOrActor(imageElem, actorCheck, detailPageCheck);
+					}
+				},
+				{
+					timeout: 10000
+				}
+			);
+		}
+	}
+
+	static insertSimilarContainerAfterImageOrActor(imageContainer, actorContainer, detailPage) {
+		// 最终检查：确保 itemId 没有变化
+		if (this.similarContainer.getAttribute('data-item-id') && 
+			this.similarContainer.getAttribute('data-item-id') !== this.itemId) {
+			console.log('[ExtraFanart] itemId已变化，取消显示相似影片');
+			return;
+		}
+		
+		// 检查是否还在详情页
+		if (!this.isDetailsPage()) {
+			console.log('[ExtraFanart] 已离开详情页，取消显示相似影片');
+			return;
+		}
 		
 		// 插入逻辑：如果演员作品已存在（先加载完成），插入到最后一个演员容器后面；否则插到剧照后面
 		if (imageContainer && document.body.contains(imageContainer)) {
@@ -1227,7 +1409,7 @@ static isDetailsPage() {
 				let lastActorContainer = actorContainer;
 				let nextIndex = 1;
 				while (true) {
-					const nextActorContainer = detailPageForInsert.querySelector(`#jv-actor-container-${nextIndex}`);
+					const nextActorContainer = detailPage.querySelector(`#jv-actor-container-${nextIndex}`);
 					if (nextActorContainer && document.body.contains(nextActorContainer)) {
 						lastActorContainer = nextActorContainer;
 						nextIndex++;
@@ -1252,37 +1434,6 @@ static isDetailsPage() {
 				} else if (this.similarContainer.previousElementSibling !== imageContainer) {
 					imageContainer.insertAdjacentElement('afterend', this.similarContainer);
 					console.log('[ExtraFanart] 相似影片移动到剧照之后（演员作品未加载）');
-				}
-			}
-		} else {
-			// 延迟重试，因为剧照容器可能还在加载
-			setTimeout(() => {
-				const retryImageContainer = document.querySelector('#jv-image-container');
-				if (retryImageContainer && !document.body.contains(this.similarContainer)) {
-					retryImageContainer.insertAdjacentElement('afterend', this.similarContainer);
-					this.similarContainer.style.display = 'block';
-				}
-			}, 300);
-			
-			// 尝试插入到演职人员区域后面（原剧照应该在的位置）
-			const castSection = document.querySelector('#itemDetailPage:not(.hide) #castCollapsible') ||
-			                    document.querySelector('.itemView:not(.hide) .peopleSection');
-			
-			if (castSection) {
-				if (!document.body.contains(this.similarContainer)) {
-					castSection.insertAdjacentElement('afterend', this.similarContainer);
-				}
-			} else {
-				// 如果连演职人员区域也没有，尝试插入到主内容区域
-				const mainContent = document.querySelector('#itemDetailPage:not(.hide)') || 
-				                    document.querySelector('.itemView:not(.hide)') ||
-				                    document.querySelector('.page:not(.hide)');
-				
-				if (mainContent && !document.body.contains(this.similarContainer)) {
-					mainContent.appendChild(this.similarContainer);
-				} else {
-					console.warn('[ExtraFanart] 未找到合适的容器位置，相似影片将不显示');
-					return;
 				}
 			}
 		}
@@ -1432,28 +1583,37 @@ static isDetailsPage() {
 			return Math.max(scrollAmount, cardWithMargin);
 		};
 		
-		const updateButtons = () => {
-			const scrollLeft = grid.scrollLeft;
-			const maxScroll = grid.scrollWidth - grid.clientWidth;
-			
-			leftBtn.style.display = scrollLeft > 0 ? 'flex' : 'none';
-			rightBtn.style.display = scrollLeft < maxScroll - 10 ? 'flex' : 'none';
+		// 使用 requestAnimationFrame 节流滚动监听回调
+		let updateRAFId = null;
+		const updateButtonsRAF = () => {
+			if (updateRAFId) {
+				cancelAnimationFrame(updateRAFId);
+			}
+			updateRAFId = requestAnimationFrame(() => {
+				const scrollLeft = grid.scrollLeft;
+				const maxScroll = grid.scrollWidth - grid.clientWidth;
+				
+				leftBtn.style.display = scrollLeft > 0 ? 'flex' : 'none';
+				rightBtn.style.display = scrollLeft < maxScroll - 10 ? 'flex' : 'none';
+				updateRAFId = null;
+			});
 		};
 		
 		leftBtn.onclick = () => {
 			const scrollAmount = calculateScrollAmount();
 			grid.scrollBy({ left: -scrollAmount, behavior: 'smooth' });
-			setTimeout(updateButtons, 300);
+			setTimeout(updateButtonsRAF, 50);
 		};
 		
 		rightBtn.onclick = () => {
 			const scrollAmount = calculateScrollAmount();
 			grid.scrollBy({ left: scrollAmount, behavior: 'smooth' });
-			setTimeout(updateButtons, 300);
+			setTimeout(updateButtonsRAF, 50);
 		};
 		
-		grid.addEventListener('scroll', updateButtons);
-		updateButtons();
+		// 使用 passive 监听器并结合 requestAnimationFrame 来避免性能问题
+		grid.addEventListener('scroll', updateButtonsRAF, { passive: true });
+		updateButtonsRAF(); // 初始状态
 	}
 
 	static addHoverTrailerEffect() {
@@ -1477,97 +1637,174 @@ static isDetailsPage() {
 			let videoElement = null;
 			let expandBtn = null;
 			let currentTrailerUrl = null;
+			let debounceTimer = null; // 防抖定时器
 			
-			card.addEventListener('mouseenter', () => {
+			const onMouseEnter = () => {
 				isHovered = true;
 				img.style.filter = 'blur(5px)';
 				
-				// 异步加载预告片
-				ExtraFanart.getTrailerUrlForHover(itemId).then(trailerUrl => {
-					if (!isHovered || !trailerUrl) return;
+				// 使用防抖，延迟 400ms 再加载预告片
+				clearTimeout(debounceTimer);
+				debounceTimer = setTimeout(() => {
+					// 防抖触发时再检查是否还在悬停状态
+					if (!isHovered) {
+						console.log('[ExtraFanart] 防抖期间鼠标离开，取消加载预告片');
+						return;
+					}
 					
-					currentTrailerUrl = trailerUrl;
-					
-					// 检查是否是 YouTube 链接
-					const isYouTube = ExtraFanart.isYouTubeUrl(trailerUrl);
-					
-					// 创建放大按钮
-					expandBtn = document.createElement('button');
-					expandBtn.className = 'jv-expand-btn';
-					expandBtn.innerHTML = `
-						<svg viewBox="0 0 24 24" width="20" height="20" fill="white">
-							<path d="M7 14H5v5h5v-2H7v-3zm-2-4h2V7h3V5H5v5zm12 7h-3v2h5v-5h-2v3zM14 5v2h3v3h2V5h-5z"/>
-						</svg>
-					`;
-					expandBtn.style.cssText = `
-						position: absolute;
-						top: 8px;
-						right: 8px;
-						width: 32px;
-						height: 32px;
-						background: rgba(0, 0, 0, 0.6);
-						border: 1px solid rgba(255, 255, 255, 0.3);
-						border-radius: 4px;
-						cursor: pointer;
-						display: flex;
-						align-items: center;
-						justify-content: center;
-						z-index: 10;
-						opacity: 0;
-						transition: all 0.2s ease;
-						backdrop-filter: blur(4px);
-					`;
-					expandBtn.title = '全屏播放';
-					
-					expandBtn.onmouseenter = () => {
-						expandBtn.style.background = 'rgba(0, 0, 0, 0.8)';
-						expandBtn.style.transform = 'scale(1.1)';
-					};
-					
-					expandBtn.onmouseleave = () => {
-						expandBtn.style.background = 'rgba(0, 0, 0, 0.6)';
-						expandBtn.style.transform = 'scale(1)';
-					};
-					
-					expandBtn.onclick = (e) => {
-						e.stopPropagation();
-						console.log('[ExtraFanart] 放大按钮被点击（相似影片）', { trailerUrl: currentTrailerUrl, isYouTube });
-						// 打开全屏播放器
-						ExtraFanart.openVideoPlayer(currentTrailerUrl, isYouTube);
-					};
-					
-					// 将按钮添加到 imageContainer 而不是 overlay，避免层级问题
-					imageContainer.appendChild(expandBtn);
-					
-					// 延迟显示按钮
-					setTimeout(() => {
-						if (expandBtn && isHovered) {
+					// 异步加载预告片
+					ExtraFanart.getTrailerUrlForHover(itemId).then(trailerUrl => {
+						if (!isHovered || !trailerUrl) {
+							console.log('[ExtraFanart] 预告片加载期间状态变化或无预告片');
+							return;
+						}
+						
+						currentTrailerUrl = trailerUrl;
+						
+						// 检查是否是 YouTube 链接
+						const isYouTube = ExtraFanart.isYouTubeUrl(trailerUrl);
+						
+						// 创建放大按钮
+						expandBtn = document.createElement('button');
+						expandBtn.className = 'jv-expand-btn';
+						expandBtn.innerHTML = `
+							<svg viewBox="0 0 24 24" width="20" height="20" fill="white">
+								<path d="M7 14H5v5h5v-2H7v-3zm-2-4h2V7h3V5H5v5zm12 7h-3v2h5v-5h-2v3zM14 5v2h3v3h2V5h-5z"/>
+							</svg>
+						`;
+						expandBtn.style.cssText = `
+							position: absolute;
+							top: 8px;
+							right: 8px;
+							width: 32px;
+							height: 32px;
+							background: rgba(0, 0, 0, 0.6);
+							border: 1px solid rgba(255, 255, 255, 0.3);
+							border-radius: 4px;
+							cursor: pointer;
+							display: flex;
+							align-items: center;
+							justify-content: center;
+							z-index: 10;
+							opacity: 0;
+							transition: all 0.2s ease;
+							backdrop-filter: blur(4px);
+						`;
+						expandBtn.title = '全屏播放';
+						
+						expandBtn.onmouseenter = () => {
+							expandBtn.style.background = 'rgba(0, 0, 0, 0.8)';
+							expandBtn.style.transform = 'scale(1.1)';
+						};
+						
+						expandBtn.onmouseleave = () => {
+							expandBtn.style.background = 'rgba(0, 0, 0, 0.6)';
+							expandBtn.style.transform = 'scale(1)';
+						};
+						
+						expandBtn.onclick = (e) => {
+							e.stopPropagation();
+							console.log('[ExtraFanart] 放大按钮被点击（相似影片）', { trailerUrl: currentTrailerUrl, isYouTube });
+							// 打开全屏播放器
+							ExtraFanart.openVideoPlayer(currentTrailerUrl, isYouTube);
+						};
+						
+						// 将按钮添加到 imageContainer 而不是 overlay，避免层级问题
+						imageContainer.appendChild(expandBtn);
+						
+						// 延迟显示按钮
+						if (isHovered && expandBtn) {
 							expandBtn.style.opacity = '1';
 						}
-					}, 300);
-					
-					if (isYouTube) {
-						// 使用 iframe 播放 YouTube 视频
-						const embedUrl = ExtraFanart.convertYouTubeUrl(trailerUrl);
 						
-						if (embedUrl) {
-							videoElement = document.createElement('iframe');
-							videoElement.src = embedUrl;
-							videoElement.frameBorder = '0';
-							videoElement.allow = 'autoplay; encrypted-media';
-							videoElement.setAttribute('disablePictureInPicture', 'true');
+						if (isYouTube) {
+							// 使用 iframe 播放 YouTube 视频
+							const embedUrl = ExtraFanart.convertYouTubeUrl(trailerUrl);
+							
+							if (embedUrl) {
+								videoElement = document.createElement('iframe');
+								videoElement.src = embedUrl;
+								videoElement.frameBorder = '0';
+								videoElement.allow = 'autoplay; encrypted-media';
+								videoElement.setAttribute('disablePictureInPicture', 'true');
+								videoElement.style.cssText = `
+									position: absolute;
+									top: 0;
+									left: 0;
+									width: 100%;
+									height: 100%;
+									border: none;
+									opacity: 0;
+									transition: opacity 0.3s ease;
+									z-index: 2;
+									pointer-events: auto;
+								`;
+								overlay.appendChild(videoElement);
+								
+								if (isHovered) {
+									setTimeout(() => {
+										if (videoElement) {
+											videoElement.style.opacity = '1';
+										}
+									}, 50);
+								}
+							}
+						} else {
+							// 使用 video 标签播放普通视频
+							videoElement = document.createElement('video');
+							videoElement.src = trailerUrl;
+							videoElement.autoplay = true;
+							videoElement.loop = true;
+							videoElement.playsInline = true;
+							videoElement.controls = true;
+							videoElement.disablePictureInPicture = true;
+							videoElement.controlsList = 'nodownload nofullscreen noremoteplayback';
+							// 默认静音播放
+							videoElement.muted = true;
+							videoElement.defaultMuted = true;
+							videoElement.volume = 0;
 							videoElement.style.cssText = `
 								position: absolute;
 								top: 0;
 								left: 0;
 								width: 100%;
 								height: 100%;
-								border: none;
+								object-fit: cover;
 								opacity: 0;
 								transition: opacity 0.3s ease;
 								z-index: 2;
-								pointer-events: auto;
 							`;
+							
+							// 监听音量变化，只在用户主动操作时记录
+							let userInteracted = false;
+							videoElement.addEventListener('volumechange', function() {
+								if (userInteracted) {
+									if (!this.muted && this.volume > 0) {
+										localStorage.setItem('jv-trailer-volume', this.volume);
+										localStorage.setItem('jv-trailer-muted', 'false');
+									} else if (this.muted) {
+										localStorage.setItem('jv-trailer-muted', 'true');
+									}
+								}
+							});
+							
+							// 标记用户交互
+							videoElement.addEventListener('click', function() { userInteracted = true; });
+							videoElement.addEventListener('mousedown', function() { userInteracted = true; });
+							
+							// 延迟恢复用户设置，避免初始化时触发
+							setTimeout(() => {
+								if (videoElement) {
+									const savedVolume = localStorage.getItem('jv-trailer-volume');
+									const savedMuted = localStorage.getItem('jv-trailer-muted');
+									if (savedMuted === 'false' && savedVolume) {
+										videoElement.muted = false;
+										videoElement.volume = parseFloat(savedVolume);
+									}
+									userInteracted = true; // 设置完成后允许记录变化
+								}
+							}, 100);
+							
 							overlay.appendChild(videoElement);
 							
 							if (isHovered) {
@@ -1578,77 +1815,16 @@ static isDetailsPage() {
 								}, 50);
 							}
 						}
-					} else {
-						// 使用 video 标签播放普通视频
-						videoElement = document.createElement('video');
-						videoElement.src = trailerUrl;
-						videoElement.autoplay = true;
-						videoElement.loop = true;
-						videoElement.playsInline = true;
-						videoElement.controls = true;
-						videoElement.disablePictureInPicture = true;
-						videoElement.controlsList = 'nodownload nofullscreen noremoteplayback';
-						// 默认静音播放
-						videoElement.muted = true;
-						videoElement.defaultMuted = true;
-						videoElement.volume = 0;
-						videoElement.style.cssText = `
-							position: absolute;
-							top: 0;
-							left: 0;
-							width: 100%;
-							height: 100%;
-							object-fit: cover;
-							opacity: 0;
-							transition: opacity 0.3s ease;
-							z-index: 2;
-						`;
-						
-						// 监听音量变化，只在用户主动操作时记录
-						let userInteracted = false;
-						videoElement.addEventListener('volumechange', function() {
-							if (userInteracted) {
-								if (!this.muted && this.volume > 0) {
-									localStorage.setItem('jv-trailer-volume', this.volume);
-									localStorage.setItem('jv-trailer-muted', 'false');
-								} else if (this.muted) {
-									localStorage.setItem('jv-trailer-muted', 'true');
-								}
-							}
-						});
-						
-						// 标记用户交互
-						videoElement.addEventListener('click', function() { userInteracted = true; });
-						videoElement.addEventListener('mousedown', function() { userInteracted = true; });
-						
-						// 延迟恢复用户设置，避免初始化时触发
-						setTimeout(() => {
-							if (videoElement) {
-								const savedVolume = localStorage.getItem('jv-trailer-volume');
-								const savedMuted = localStorage.getItem('jv-trailer-muted');
-								if (savedMuted === 'false' && savedVolume) {
-									videoElement.muted = false;
-									videoElement.volume = parseFloat(savedVolume);
-								}
-								userInteracted = true; // 设置完成后允许记录变化
-							}
-						}, 100);
-						
-						overlay.appendChild(videoElement);
-						
-						if (isHovered) {
-							setTimeout(() => {
-								if (videoElement) {
-									videoElement.style.opacity = '1';
-								}
-							}, 50);
-						}
-					}
-				});
-			});
+					});
+				}, 400); // 防抖延迟 400ms
+			};
 			
-			card.addEventListener('mouseleave', () => {
+			const onMouseLeave = () => {
 				isHovered = false;
+				
+				// 取消待处理的防抖操作
+				clearTimeout(debounceTimer);
+				
 				img.style.filter = '';
 				
 				if (videoElement) {
@@ -1662,7 +1838,10 @@ static isDetailsPage() {
 				}
 				
 				currentTrailerUrl = null;
-			});
+			};
+			
+			card.addEventListener('mouseenter', onMouseEnter);
+			card.addEventListener('mouseleave', onMouseLeave);
 		});
 	}
 
@@ -4887,11 +5066,13 @@ static isDetailsPage() {
 		console.log('[ExtraFanart] 准备添加', items.length, '个演员作品');
 		const gridContainer = actorContainer.querySelector('.jv-actor-grid');
 		
-		// 添加内容到容器（此时容器仍然隐藏）
+		// 使用 DocumentFragment 批量添加卡片，避免重排
+		const fragment = document.createDocumentFragment();
 		items.forEach(item => {
 			const card = this.createActorCard(item);
-			gridContainer.appendChild(card);
+			fragment.appendChild(card);
 		});
+		gridContainer.appendChild(fragment);
 		
 		// 更新作品数量显示
 		const countElement = actorContainer.querySelector('.jv-actor-count');
@@ -5221,207 +5402,226 @@ static isDetailsPage() {
 		actorContainers.forEach(actorContainer => {
 			const cards = actorContainer.querySelectorAll('.jv-similar-card');
 		
-		cards.forEach((card, index) => {
-			const imageContainer = card.querySelector('.jv-similar-card-image');
-			const hasTrailer = imageContainer && imageContainer.classList.contains('has-trailer');
-			
-			if (!imageContainer || !hasTrailer) return;
-			
-			const img = imageContainer.querySelector('img');
-			const overlay = imageContainer.querySelector('.jv-card-overlay');
-			const itemId = card.dataset.itemId;
-			
-			let isHovered = false;
-			let videoElement = null;
-			let expandBtn = null;
-			let currentTrailerUrl = null;
-			
-			card.addEventListener('mouseenter', () => {
-				isHovered = true;
-				img.style.filter = 'blur(5px)';
+			cards.forEach((card, index) => {
+				const imageContainer = card.querySelector('.jv-similar-card-image');
+				const hasTrailer = imageContainer && imageContainer.classList.contains('has-trailer');
 				
-				// 异步加载预告片
-				ExtraFanart.getTrailerUrlForHover(itemId).then(trailerUrl => {
-					if (!isHovered || !trailerUrl) return;
+				if (!imageContainer || !hasTrailer) return;
+				
+				const img = imageContainer.querySelector('img');
+				const overlay = imageContainer.querySelector('.jv-card-overlay');
+				const itemId = card.dataset.itemId;
+				
+				let isHovered = false;
+				let videoElement = null;
+				let expandBtn = null;
+				let currentTrailerUrl = null;
+				let debounceTimer = null; // 防抖定时器
+				
+				const onMouseEnter = () => {
+					isHovered = true;
+					img.style.filter = 'blur(5px)';
 					
-					currentTrailerUrl = trailerUrl;
-					
-					// 检查是否是 YouTube 链接
-					const isYouTube = ExtraFanart.isYouTubeUrl(trailerUrl);
-					
-					// 创建放大按钮
-					expandBtn = document.createElement('button');
-					expandBtn.className = 'jv-expand-btn';
-					expandBtn.innerHTML = `
-						<svg viewBox="0 0 24 24" width="20" height="20" fill="white">
-							<path d="M7 14H5v5h5v-2H7v-3zm-2-4h2V7h3V5H5v5zm12 7h-3v2h5v-5h-2v3zM14 5v2h3v3h2V5h-5z"/>
-						</svg>
-					`;
-					expandBtn.style.cssText = `
-						position: absolute;
-						top: 8px;
-						right: 8px;
-						width: 32px;
-						height: 32px;
-						background: rgba(0, 0, 0, 0.6);
-						border: 1px solid rgba(255, 255, 255, 0.3);
-						border-radius: 4px;
-						cursor: pointer;
-						display: flex;
-						align-items: center;
-						justify-content: center;
-						z-index: 10;
-						opacity: 0;
-						transition: all 0.2s ease;
-						backdrop-filter: blur(4px);
-					`;
-					expandBtn.title = '全屏播放';
-					
-					expandBtn.onmouseenter = () => {
-						expandBtn.style.background = 'rgba(0, 0, 0, 0.8)';
-						expandBtn.style.transform = 'scale(1.1)';
-					};
-					
-					expandBtn.onmouseleave = () => {
-						expandBtn.style.background = 'rgba(0, 0, 0, 0.6)';
-						expandBtn.style.transform = 'scale(1)';
-					};
-					
-					expandBtn.onclick = (e) => {
-						e.stopPropagation();
-						console.log('[ExtraFanart] 放大按钮被点击（演员作品）', { trailerUrl: currentTrailerUrl, isYouTube });
-						// 打开全屏播放器
-						ExtraFanart.openVideoPlayer(currentTrailerUrl, isYouTube);
-					};
-					
-					// 将按钮添加到 imageContainer 而不是 overlay，避免层级问题
-					imageContainer.appendChild(expandBtn);
-					
-					// 延迟显示按钮
-					setTimeout(() => {
-						if (expandBtn && isHovered) {
-							expandBtn.style.opacity = '1';
+					// 使用防抖，延迟 400ms 再加载预告片
+					clearTimeout(debounceTimer);
+					debounceTimer = setTimeout(() => {
+						// 防抖触发时再检查是否还在悬停状态
+						if (!isHovered) {
+							console.log('[ExtraFanart] 防抖期间鼠标离开，取消加载预告片（演员作品）');
+							return;
 						}
-					}, 300);
-					
-					if (isYouTube) {
-						// 使用 iframe 播放 YouTube 视频
-						const embedUrl = ExtraFanart.convertYouTubeUrl(trailerUrl);
 						
-						if (embedUrl) {
-							videoElement = document.createElement('iframe');
-							videoElement.src = embedUrl;
-							videoElement.frameBorder = '0';
-							videoElement.allow = 'autoplay; encrypted-media';
-							videoElement.setAttribute('disablePictureInPicture', 'true');
-							videoElement.style.cssText = `
-								position: absolute;
-								top: 0;
-								left: 0;
-								width: 100%;
-								height: 100%;
-								border: none;
-								opacity: 0;
-								transition: opacity 0.3s ease;
-								z-index: 2;
-								pointer-events: auto;
-							`;
-							overlay.appendChild(videoElement);
+						// 异步加载预告片
+						ExtraFanart.getTrailerUrlForHover(itemId).then(trailerUrl => {
+							if (!isHovered || !trailerUrl) {
+								console.log('[ExtraFanart] 预告片加载期间状态变化或无预告片（演员作品）');
+								return;
+							}
 							
-							if (isHovered) {
+							currentTrailerUrl = trailerUrl;
+							
+							// 检查是否是 YouTube 链接
+							const isYouTube = ExtraFanart.isYouTubeUrl(trailerUrl);
+							
+							// 创建放大按钮
+							expandBtn = document.createElement('button');
+							expandBtn.className = 'jv-expand-btn';
+							expandBtn.innerHTML = `
+								<svg viewBox="0 0 24 24" width="20" height="20" fill="white">
+									<path d="M7 14H5v5h5v-2H7v-3zm-2-4h2V7h3V5H5v5zm12 7h-3v2h5v-5h-2v3zM14 5v2h3v3h2V5h-5z"/>
+								</svg>
+							`;
+							expandBtn.style.cssText = `
+								position: absolute;
+								top: 8px;
+								right: 8px;
+								width: 32px;
+								height: 32px;
+								background: rgba(0, 0, 0, 0.6);
+								border: 1px solid rgba(255, 255, 255, 0.3);
+								border-radius: 4px;
+								cursor: pointer;
+								display: flex;
+								align-items: center;
+								justify-content: center;
+								z-index: 10;
+								opacity: 0;
+								transition: all 0.2s ease;
+								backdrop-filter: blur(4px);
+							`;
+							expandBtn.title = '全屏播放';
+							
+							expandBtn.onmouseenter = () => {
+								expandBtn.style.background = 'rgba(0, 0, 0, 0.8)';
+								expandBtn.style.transform = 'scale(1.1)';
+							};
+							
+							expandBtn.onmouseleave = () => {
+								expandBtn.style.background = 'rgba(0, 0, 0, 0.6)';
+								expandBtn.style.transform = 'scale(1)';
+							};
+							
+							expandBtn.onclick = (e) => {
+								e.stopPropagation();
+								console.log('[ExtraFanart] 放大按钮被点击（演员作品）', { trailerUrl: currentTrailerUrl, isYouTube });
+								// 打开全屏播放器
+								ExtraFanart.openVideoPlayer(currentTrailerUrl, isYouTube);
+							};
+							
+							// 将按钮添加到 imageContainer 而不是 overlay，避免层级问题
+							imageContainer.appendChild(expandBtn);
+							
+							// 延迟显示按钮
+							if (isHovered && expandBtn) {
+								expandBtn.style.opacity = '1';
+							}
+							
+							if (isYouTube) {
+								// 使用 iframe 播放 YouTube 视频
+								const embedUrl = ExtraFanart.convertYouTubeUrl(trailerUrl);
+								
+								if (embedUrl) {
+									videoElement = document.createElement('iframe');
+									videoElement.src = embedUrl;
+									videoElement.frameBorder = '0';
+									videoElement.allow = 'autoplay; encrypted-media';
+									videoElement.setAttribute('disablePictureInPicture', 'true');
+									videoElement.style.cssText = `
+										position: absolute;
+										top: 0;
+										left: 0;
+										width: 100%;
+										height: 100%;
+										border: none;
+										opacity: 0;
+										transition: opacity 0.3s ease;
+										z-index: 2;
+										pointer-events: auto;
+									`;
+									overlay.appendChild(videoElement);
+									
+									if (isHovered) {
+										setTimeout(() => {
+											if (videoElement) {
+												videoElement.style.opacity = '1';
+											}
+										}, 50);
+									}
+								}
+							} else {
+								// 使用 video 标签播放普通视频
+								videoElement = document.createElement('video');
+								videoElement.src = trailerUrl;
+								videoElement.autoplay = true;
+								videoElement.loop = true;
+								videoElement.playsInline = true;
+								videoElement.controls = true;
+								videoElement.disablePictureInPicture = true;
+								videoElement.controlsList = 'nodownload nofullscreen noremoteplayback';
+								// 默认静音播放
+								videoElement.muted = true;
+								videoElement.defaultMuted = true;
+								videoElement.volume = 0;
+								videoElement.style.cssText = `
+									position: absolute;
+									top: 0;
+									left: 0;
+									width: 100%;
+									height: 100%;
+									object-fit: cover;
+									opacity: 0;
+									transition: opacity 0.3s ease;
+									z-index: 2;
+								`;
+								
+								// 监听音量变化，只在用户主动操作时记录
+								let userInteracted = false;
+								videoElement.addEventListener('volumechange', function() {
+									if (userInteracted) {
+										if (!this.muted && this.volume > 0) {
+											localStorage.setItem('jv-trailer-volume', this.volume);
+											localStorage.setItem('jv-trailer-muted', 'false');
+										} else if (this.muted) {
+											localStorage.setItem('jv-trailer-muted', 'true');
+										}
+									}
+								});
+								
+								// 标记用户交互
+								videoElement.addEventListener('click', function() { userInteracted = true; });
+								videoElement.addEventListener('mousedown', function() { userInteracted = true; });
+								
+								// 延迟恢复用户设置，避免初始化时触发
 								setTimeout(() => {
 									if (videoElement) {
-										videoElement.style.opacity = '1';
+										const savedVolume = localStorage.getItem('jv-trailer-volume');
+										const savedMuted = localStorage.getItem('jv-trailer-muted');
+										if (savedMuted === 'false' && savedVolume) {
+											videoElement.muted = false;
+											videoElement.volume = parseFloat(savedVolume);
+										}
+										userInteracted = true; // 设置完成后允许记录变化
 									}
-								}, 50);
-							}
-						}
-					} else {
-						// 使用 video 标签播放普通视频
-						videoElement = document.createElement('video');
-						videoElement.src = trailerUrl;
-						videoElement.autoplay = true;
-						videoElement.loop = true;
-						videoElement.playsInline = true;
-						videoElement.controls = true;
-						videoElement.disablePictureInPicture = true;
-						videoElement.controlsList = 'nodownload nofullscreen noremoteplayback';
-						// 默认静音播放
-						videoElement.muted = true;
-						videoElement.defaultMuted = true;
-						videoElement.volume = 0;
-						videoElement.style.cssText = `
-							position: absolute;
-							top: 0;
-							left: 0;
-							width: 100%;
-							height: 100%;
-							object-fit: cover;
-							opacity: 0;
-							transition: opacity 0.3s ease;
-							z-index: 2;
-						`;
-						
-						// 监听音量变化，只在用户主动操作时记录
-						let userInteracted = false;
-						videoElement.addEventListener('volumechange', function() {
-							if (userInteracted) {
-								if (!this.muted && this.volume > 0) {
-									localStorage.setItem('jv-trailer-volume', this.volume);
-									localStorage.setItem('jv-trailer-muted', 'false');
-								} else if (this.muted) {
-									localStorage.setItem('jv-trailer-muted', 'true');
+								}, 100);
+								
+								overlay.appendChild(videoElement);
+								
+								if (isHovered) {
+									setTimeout(() => {
+										if (videoElement) {
+											videoElement.style.opacity = '1';
+										}
+									}, 50);
 								}
 							}
 						});
-						
-						// 标记用户交互
-						videoElement.addEventListener('click', function() { userInteracted = true; });
-						videoElement.addEventListener('mousedown', function() { userInteracted = true; });
-						
-						// 延迟恢复用户设置，避免初始化时触发
-						setTimeout(() => {
-							if (videoElement) {
-								const savedVolume = localStorage.getItem('jv-trailer-volume');
-								const savedMuted = localStorage.getItem('jv-trailer-muted');
-								if (savedMuted === 'false' && savedVolume) {
-									videoElement.muted = false;
-									videoElement.volume = parseFloat(savedVolume);
-								}
-								userInteracted = true; // 设置完成后允许记录变化
-							}
-						}, 100);
-						
-						overlay.appendChild(videoElement);
-						
-						if (isHovered) {
-							setTimeout(() => {
-								if (videoElement) {
-									videoElement.style.opacity = '1';
-								}
-							}, 50);
-						}
+					}, 400); // 防抖延迟 400ms
+				};
+				
+				const onMouseLeave = () => {
+					isHovered = false;
+					
+					// 取消待处理的防抖操作
+					clearTimeout(debounceTimer);
+					
+					img.style.filter = '';
+					
+					if (videoElement) {
+						videoElement.remove();
+						videoElement = null;
 					}
-				});
+					
+					if (expandBtn && expandBtn.parentNode) {
+						expandBtn.parentNode.removeChild(expandBtn);
+						expandBtn = null;
+					}
+					
+					currentTrailerUrl = null;
+				};
+				
+				card.addEventListener('mouseenter', onMouseEnter);
+				card.addEventListener('mouseleave', onMouseLeave);
 			});
-			
-			card.addEventListener('mouseleave', () => {
-				isHovered = false;
-				img.style.filter = '';
-				
-				if (videoElement) {
-					videoElement.remove();
-					videoElement = null;
-				}
-				
-				if (expandBtn && expandBtn.parentNode) {
-					expandBtn.parentNode.removeChild(expandBtn);
-					expandBtn = null;
-				}
-				
-				currentTrailerUrl = null;
-			});
-		});
 		});
 	}
 }
