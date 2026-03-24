@@ -110,14 +110,19 @@
    - 访问本仓库，选择需要的脚本
    - 复制脚本的完整代码
 
-3. **添加到 Emby**
-   - 打开 Emby.CustomCssJS 管理界面
+3. **进入 Emby.CustomCssJS 页面**
+   - 安装完成后，打开 `https://你的 Emby 地址/web/index.html#!/configurationpage?name=customcssjs`
+   - 请将上面的 `你的 Emby 地址` 替换为你自己的 Emby 访问地址
+   - 进入页面后先点击“载入”按钮，确保当前配置已成功加载
+
+4. **添加到 Emby**
    - **JavaScript 脚本**：粘贴到"自定义 JavaScript"区域
    - **CSS 样式**（如 HoverGlowEffect.css）：粘贴到"自定义 CSS"区域
    - 可同时添加多个脚本
 
-4. **保存并生效**
-   - 保存设置后刷新 Emby 页面即可看到效果
+5. **保存并生效**
+   - 保存设置后，使用 `Ctrl+F5` 强制刷新 Emby 页面
+   - 刷新后查看对应功能或样式是否已经生效
 
 **安装位置参考：**
 ```
