@@ -21,6 +21,14 @@ class ExtraFanart {
 		this.enableActorMoreItems = true;
 		// 演员其他作品最多显示数量（每个演员）
 		this.maxActorMoreItems = 20;
+		
+		// 媒体库过滤模式：
+		// all=全部媒体库生效
+		// include=仅指定媒体库生效
+		// exclude=排除指定媒体库
+		this.libraryFilterMode = 'all';
+		// 目标媒体库标识列表，支持填写媒体库的 Id、Guid 或名称（建议优先使用 Id）
+		this.targetLibraryIds = [];
 		// ===================
 		
 		// JavDB API 相关
@@ -53,6 +61,9 @@ class ExtraFanart {
 		this.cachedCodes = new Map(); // 缓存提取的番号
 		this.cachedImages = new Map(); // 缓存剧照数据 {endImageIndex, trailerUrl, imageTagMap}
 		this.cachedActorItems = new Map(); // 缓存演员作品数据
+		this.userViewsCache = null; // 缓存当前用户可见媒体库
+		this.userViewsLookup = new Map(); // 媒体库快速索引
+		this.libraryInfoCache = new Map(); // 缓存条目所属媒体库
 		// 初始化 AbortController 用于取消异步请求
 		if (ExtraFanart.currentAbortController) {
 			ExtraFanart.currentAbortController.abort();
@@ -162,6 +173,360 @@ class ExtraFanart {
 	}
 	static getCurrentItemId() {
 		return location.hash.match(/id\=(\w+)/)?.[1] ?? null;
+	}
+
+	static getCurrentParentId() {
+		const parentId = location.hash.match(/[?&]parentId=([^&]+)/)?.[1] ?? null;
+		return parentId ? decodeURIComponent(parentId) : null;
+	}
+
+	static normalizeLibraryIdentifier(value) {
+		return String(value || '').trim().toLowerCase();
+	}
+
+	static normalizeLibraryPath(value) {
+		return String(value || '')
+			.trim()
+			.replace(/\//g, '\\')
+			.replace(/\\+$/, '')
+			.toLowerCase();
+	}
+
+	static isLibraryFilterEnabled() {
+		const mode = String(this.libraryFilterMode || 'all').toLowerCase();
+		return (mode === 'include' || mode === 'exclude') &&
+			Array.isArray(this.targetLibraryIds) &&
+			this.targetLibraryIds.some(id => this.normalizeLibraryIdentifier(id));
+	}
+
+	static getConfiguredLibraryIdentifierSet() {
+		return new Set(
+			(Array.isArray(this.targetLibraryIds) ? this.targetLibraryIds : [])
+				.map(id => this.normalizeLibraryIdentifier(id))
+				.filter(Boolean)
+		);
+	}
+
+	static getLibraryMatchKeys(library) {
+		return [library?.Id, library?.Guid, library?.Name]
+			.map(value => this.normalizeLibraryIdentifier(value))
+			.filter(Boolean);
+	}
+
+	static getItemLookupKeys(item) {
+		return [item?.Id, item?.Guid]
+			.map(value => this.normalizeLibraryIdentifier(value))
+			.filter(Boolean);
+	}
+
+	static buildApiUrl(path, query = {}) {
+		const serverAddress = (((typeof ApiClient !== 'undefined' && ApiClient._serverAddress) ? ApiClient._serverAddress : location.origin) || '').replace(/\/$/, '');
+		const normalizedPath = String(path || '').replace(/^\//, '');
+		const params = new URLSearchParams();
+
+		Object.entries(query).forEach(([key, value]) => {
+			if (value !== undefined && value !== null && value !== '') {
+				params.set(key, String(value));
+			}
+		});
+
+		if (typeof ApiClient !== 'undefined' && typeof ApiClient.accessToken === 'function') {
+			const accessToken = ApiClient.accessToken();
+			if (accessToken && !params.has('api_key')) {
+				params.set('api_key', accessToken);
+			}
+		}
+
+		const queryString = params.toString();
+		return queryString ? `${serverAddress}/${normalizedPath}?${queryString}` : `${serverAddress}/${normalizedPath}`;
+	}
+
+	static async fetchApiJson(path, query = {}) {
+		const url = this.buildApiUrl(path, query);
+		const response = await fetch(url, {
+			method: 'GET',
+			credentials: 'same-origin'
+		});
+
+		if (!response.ok) {
+			throw new Error(`HTTP ${response.status}: ${url}`);
+		}
+
+		return response.json();
+	}
+
+	static async getItemAncestors(itemId) {
+		if (!itemId || typeof ApiClient === 'undefined') {
+			return [];
+		}
+
+		try {
+			const ancestors = await this.fetchApiJson(`Items/${itemId}/Ancestors`, {
+				UserId: ApiClient.getCurrentUserId()
+			});
+			return Array.isArray(ancestors) ? ancestors : [];
+		} catch (error) {
+			console.warn('[ExtraFanart] 获取祖先链失败:', { itemId, error });
+			return [];
+		}
+	}
+
+	static matchLibraryFromCandidate(candidate) {
+		if (!candidate || !this.userViewsCache?.Items?.length) {
+			return null;
+		}
+
+		const exactMatchKeys = [
+			...this.getItemLookupKeys(candidate),
+			this.normalizeLibraryIdentifier(candidate.ParentId)
+		].filter(Boolean);
+
+		for (const key of exactMatchKeys) {
+			const matchedLibrary = this.userViewsLookup.get(key);
+			if (matchedLibrary) {
+				return matchedLibrary;
+			}
+		}
+
+		const candidatePath = this.normalizeLibraryPath(candidate.Path);
+		if (candidatePath) {
+			const pathMatchedLibrary = this.userViewsCache.Items.find(view => {
+				const viewPath = this.normalizeLibraryPath(view?.Path);
+				if (!viewPath) {
+					return false;
+				}
+
+				return candidatePath === viewPath || candidatePath.startsWith(`${viewPath}\\`);
+			});
+
+			if (pathMatchedLibrary) {
+				return pathMatchedLibrary;
+			}
+		}
+
+		const nameKey = this.normalizeLibraryIdentifier(candidate.Name);
+		if (nameKey) {
+			return this.userViewsLookup.get(nameKey) || null;
+		}
+
+		return null;
+	}
+
+	static async getUserViews() {
+		if (this.userViewsCache) {
+			return this.userViewsCache;
+		}
+
+		if (typeof ApiClient === 'undefined') {
+			return null;
+		}
+
+		try {
+			const userId = ApiClient.getCurrentUserId();
+			const userViews = await ApiClient.getUserViews({}, userId);
+			this.userViewsCache = userViews;
+			this.userViewsLookup = new Map();
+
+			(userViews?.Items || []).forEach(view => {
+				this.getLibraryMatchKeys(view).forEach(key => {
+					if (!this.userViewsLookup.has(key)) {
+						this.userViewsLookup.set(key, view);
+					}
+				});
+			});
+
+			return userViews;
+		} catch (error) {
+			console.warn('[ExtraFanart] 获取媒体库列表失败:', error);
+			return null;
+		}
+	}
+
+	static async resolveItemLibrary(itemId, itemDetails = null) {
+		if (!itemId || typeof ApiClient === 'undefined') {
+			return null;
+		}
+
+		if (this.libraryInfoCache.has(itemId)) {
+			return this.libraryInfoCache.get(itemId);
+		}
+
+		const userViews = await this.getUserViews();
+		if (!userViews?.Items?.length) {
+			return null;
+		}
+
+		const routeParentId = this.getCurrentParentId();
+		if (routeParentId) {
+			const routeLibrary = this.userViewsLookup.get(this.normalizeLibraryIdentifier(routeParentId));
+			if (routeLibrary) {
+				this.libraryInfoCache.set(itemId, routeLibrary);
+				console.log('[ExtraFanart] 已通过路由 parentId 解析所属媒体库:', {
+					itemId,
+					parentId: routeParentId,
+					libraryName: routeLibrary.Name,
+					libraryId: routeLibrary.Id
+				});
+				return routeLibrary;
+			}
+		}
+
+		const userId = ApiClient.getCurrentUserId();
+		const visitedIds = [];
+		const visitedParentIds = new Set();
+		let currentItem = itemDetails || await this.getItemDetails(itemId);
+		const directMatchedLibrary = this.matchLibraryFromCandidate(currentItem);
+		if (directMatchedLibrary) {
+			visitedIds.push(currentItem?.Id);
+			visitedIds.filter(Boolean).forEach(id => this.libraryInfoCache.set(id, directMatchedLibrary));
+			console.log('[ExtraFanart] 已通过当前条目解析所属媒体库:', {
+				itemId,
+				libraryName: directMatchedLibrary.Name,
+				libraryId: directMatchedLibrary.Id
+			});
+			return directMatchedLibrary;
+		}
+
+		const ancestors = await this.getItemAncestors(itemId);
+		for (const ancestor of ancestors) {
+			if (ancestor?.Id) {
+				visitedIds.push(ancestor.Id);
+			}
+
+			const ancestorMatchedLibrary = this.matchLibraryFromCandidate(ancestor);
+			if (ancestorMatchedLibrary) {
+				visitedIds.filter(Boolean).forEach(id => this.libraryInfoCache.set(id, ancestorMatchedLibrary));
+				this.libraryInfoCache.set(itemId, ancestorMatchedLibrary);
+				console.log('[ExtraFanart] 已通过祖先链解析所属媒体库:', {
+					itemId,
+					libraryName: ancestorMatchedLibrary.Name,
+					libraryId: ancestorMatchedLibrary.Id,
+					ancestorName: ancestor?.Name,
+					ancestorId: ancestor?.Id
+				});
+				return ancestorMatchedLibrary;
+			}
+		}
+
+		while (currentItem) {
+			visitedIds.push(currentItem.Id);
+
+			const matchedLibrary = this.matchLibraryFromCandidate(currentItem);
+			if (matchedLibrary) {
+				visitedIds.forEach(id => this.libraryInfoCache.set(id, matchedLibrary));
+				console.log('[ExtraFanart] 已解析所属媒体库:', {
+					itemId,
+					libraryName: matchedLibrary.Name,
+					libraryId: matchedLibrary.Id
+				});
+				return matchedLibrary;
+			}
+
+			const parentId = currentItem.ParentId;
+			if (!parentId || visitedParentIds.has(parentId)) {
+				break;
+			}
+
+			visitedParentIds.add(parentId);
+
+			const parentLibrary = this.userViewsLookup.get(this.normalizeLibraryIdentifier(parentId));
+			if (parentLibrary) {
+				visitedIds.forEach(id => this.libraryInfoCache.set(id, parentLibrary));
+				this.libraryInfoCache.set(parentId, parentLibrary);
+				console.log('[ExtraFanart] 已通过父级解析所属媒体库:', {
+					itemId,
+					libraryName: parentLibrary.Name,
+					libraryId: parentLibrary.Id
+				});
+				return parentLibrary;
+			}
+
+			try {
+				currentItem = await ApiClient.getItem(userId, parentId);
+			} catch (error) {
+				console.warn('[ExtraFanart] 向上查找父级媒体项失败:', { itemId, parentId, error });
+				currentItem = null;
+			}
+		}
+
+		visitedIds.forEach(id => this.libraryInfoCache.set(id, null));
+		console.warn('[ExtraFanart] 未能解析所属媒体库:', {
+			itemId,
+			parentId: routeParentId,
+			currentItemName: currentItem?.Name,
+			currentItemPath: currentItem?.Path,
+			userViews: userViews.Items.map(view => ({
+				name: view.Name,
+				id: view.Id,
+				guid: view.Guid,
+				path: view.Path
+			}))
+		});
+		return null;
+	}
+
+	static async isItemLibraryAllowed(itemId, itemDetails = null) {
+		if (!this.isLibraryFilterEnabled()) {
+			return { allowed: true, library: null };
+		}
+
+		const mode = String(this.libraryFilterMode || 'all').toLowerCase();
+		const configuredIds = this.getConfiguredLibraryIdentifierSet();
+		const library = await this.resolveItemLibrary(itemId, itemDetails);
+
+		if (!library) {
+			console.warn('[ExtraFanart] 无法判断媒体库归属，已按过滤模式跳过增强:', { itemId, mode });
+			return { allowed: false, library: null };
+		}
+
+		const isMatched = this.getLibraryMatchKeys(library).some(key => configuredIds.has(key));
+		const allowed = mode === 'exclude' ? !isMatched : isMatched;
+
+		console.log('[ExtraFanart] 媒体库过滤检查:', {
+			itemId,
+			mode,
+			libraryName: library.Name,
+			libraryId: library.Id,
+			isMatched,
+			allowed
+		});
+
+		return { allowed, library };
+	}
+
+	static hideInjectedContainers() {
+		if (this.imageContainer) {
+			this.imageContainer.style.display = 'none';
+			this.imageContainer.removeAttribute('data-item-id');
+		}
+
+		if (this.similarContainer) {
+			this.similarContainer.style.display = 'none';
+			this.similarContainer.removeAttribute('data-item-id');
+		}
+
+		let actorIndex = 0;
+		while (true) {
+			const containerId = actorIndex === 0 ? 'jv-actor-container' : `jv-actor-container-${actorIndex}`;
+			const actorContainer = document.querySelector(`#${containerId}`);
+			if (!actorContainer) {
+				break;
+			}
+
+			actorContainer.style.display = 'none';
+			actorContainer.removeAttribute('data-item-id');
+			actorIndex++;
+		}
+
+		const detailPage = document.querySelector('#itemDetailPage:not(.hide), .itemView:not(.hide)');
+		if (detailPage) {
+			detailPage.querySelectorAll('.jv-web-links-container').forEach(container => container.remove());
+		}
+
+		if (this.zoomedMask) {
+			this.zoomedMask.style.display = 'none';
+		}
+		this.currentZoomedImageIndex = -1;
 	}
 
 	static getBackgroundImageSrc(index) {
@@ -596,36 +961,48 @@ class ExtraFanart {
 
 static isDetailsPage() {
 	return location.hash.includes('/details?id=') || location.hash.includes('/item?id=');
-}	static async getItemDetails(itemId) {
-		if (typeof ApiClient !== 'undefined') {
-			try {
-				const userId = ApiClient.getCurrentUserId();
-				return await ApiClient.getItem(userId, itemId);
-			} catch (error) {
-				console.warn('获取媒体详情失败:', error);
+}
+
+	static async getItemDetails(itemId) {
+		if (!itemId || typeof ApiClient === 'undefined') {
+			return null;
+		}
+
+		if (this.itemDetails && this.itemDetails.Id === itemId) {
+			return this.itemDetails;
+		}
+
+		try {
+			const userId = ApiClient.getCurrentUserId();
+			const item = await ApiClient.getItem(userId, itemId);
+			if (this.getCurrentItemId() === itemId) {
+				this.itemDetails = item;
 			}
+			return item;
+		} catch (error) {
+			console.warn('获取媒体详情失败:', error);
 		}
 		return null;
 	}
 
-	static async getTrailerUrl(itemId) {
-		const details = await this.getItemDetails(itemId);
+	static async getTrailerUrl(itemId, itemDetails = null) {
+		const details = itemDetails || await this.getItemDetails(itemId);
 		if (details && details.RemoteTrailers && details.RemoteTrailers.length > 0) {
 			return details.RemoteTrailers[0].Url;
 		}
 		return null;
 	}
 
-	static async getEndImageIndex() {
-		if (typeof ApiClient !== 'undefined') {
+	static async getEndImageIndex(itemId = this.getCurrentItemId(), itemDetails = null) {
+		const details = itemDetails || await this.getItemDetails(itemId);
+		if (details) {
 			try {
-				const response = await ApiClient.getItem(ApiClient.getCurrentUserId(), this.getCurrentItemId());
-				if (response.BackdropImageTags && response.BackdropImageTags.length > 0) {
+				if (details.BackdropImageTags && details.BackdropImageTags.length > 0) {
 					// 存储每张图片的tag
-					response.BackdropImageTags.forEach((tag, index) => {
+					details.BackdropImageTags.forEach((tag, index) => {
 						this.imageTagMap.set(index, tag);
 					});
-					return response.BackdropImageTags.length - 1;
+					return details.BackdropImageTags.length - 1;
 				}
 				return 0;
 			} catch (error) {
@@ -673,6 +1050,24 @@ static isDetailsPage() {
 		this.currentAbortController.abort();
 	}
 	this.currentAbortController = new AbortController();
+
+	if (this.isLibraryFilterEnabled() && this.itemId && this.itemId !== currentItemId) {
+		this.hideInjectedContainers();
+	}
+
+	const currentItemDetails = await this.getItemDetails(currentItemId);
+	const libraryCheck = await this.isItemLibraryAllowed(currentItemId, currentItemDetails);
+	if (!libraryCheck.allowed) {
+		this.itemId = currentItemId;
+		this.itemDetails = currentItemDetails;
+		this.hideInjectedContainers();
+		console.log('[ExtraFanart] 当前媒体库不在生效范围内，跳过增强', {
+			itemId: currentItemId,
+			libraryName: libraryCheck.library?.Name,
+			libraryId: libraryCheck.library?.Id
+		});
+		return;
+	}
 	
 	// 如果是同一个项目且不是页面刷新，确保容器可见
 	if (isSameItem && !this.isPageRefresh) {
@@ -804,6 +1199,7 @@ static isDetailsPage() {
 		// 先更新itemId
 		const oldItemId = this.itemId;
 		this.itemId = currentItemId;
+		this.itemDetails = currentItemDetails;
 		
 		// 如果切换到新的itemId，立即隐藏所有旧容器，防止显示旧内容
 		if (oldItemId !== currentItemId) {
@@ -843,8 +1239,8 @@ static isDetailsPage() {
 			
 			// 并行化异步请求：同时获取图片数量和预告片URL
 			const [endImageIndex, trailerUrl] = await Promise.all([
-				this.getEndImageIndex(),
-				this.getTrailerUrl(currentItemId)
+				this.getEndImageIndex(currentItemId, currentItemDetails),
+				this.getTrailerUrl(currentItemId, currentItemDetails)
 			]);
 			this.endImageIndex = endImageIndex;
 			this.trailerUrl = trailerUrl;
@@ -1169,7 +1565,7 @@ static isDetailsPage() {
 		}
 		
 		try {
-			const item = await ApiClient.getItem(ApiClient.getCurrentUserId(), this.itemId);
+			const item = await this.getItemDetails(this.itemId);
 			if (!item || item.Type !== 'Movie') return;
 			
 			const options = {
@@ -1910,7 +2306,7 @@ static isDetailsPage() {
 		}
 		
 		try {
-			const item = await ApiClient.getItem(ApiClient.getCurrentUserId(), this.itemId);
+			const item = await this.getItemDetails(this.itemId);
 			if (!item || item.Type !== 'Movie') return;
 			
 			// 查找标题元素 - 优化选择器查询顺序，最常用的放前面
@@ -4971,7 +5367,7 @@ static isDetailsPage() {
 		}
 		
 		try {
-			const item = await ApiClient.getItem(ApiClient.getCurrentUserId(), this.itemId);
+			const item = await this.getItemDetails(this.itemId);
 			if (!item || item.Type !== 'Movie') return;
 			
 			// 获取演员名字（最多3个）

@@ -194,7 +194,7 @@ this.targetLibraryIds = ['abc123', 'def456'];
 **基本使用：**
 在媒体详情页自动显示剧照、预告片、相似影片、演员作品和 JavDB 短评（如果有内容）。
 
-**配置选项（脚本开头第3-20行）：**
+**配置选项（脚本开头配置区域）：**
 
 ```javascript
 // 是否显示网络链接容器（番号搜索链接）
@@ -212,6 +212,33 @@ this.maxSimilarItems = 20;
 this.enableActorMoreItems = true;
 // 演员其他作品最多显示数量（每个演员，默认20部，可调整）
 this.maxActorMoreItems = 20;
+
+// 媒体库过滤模式：
+// all=全部媒体库生效
+// include=仅指定媒体库生效
+// exclude=排除指定媒体库
+this.libraryFilterMode = 'all';
+
+// 目标媒体库标识列表，支持填写媒体库 Id、Guid 或名称（建议优先使用 Id）
+this.targetLibraryIds = [];
+```
+
+**媒体库过滤说明：**
+
+- `libraryFilterMode = 'all'`：默认值，对所有媒体库生效
+- `libraryFilterMode = 'include'`：只在 `targetLibraryIds` 指定的媒体库详情页生效
+- `libraryFilterMode = 'exclude'`：在 `targetLibraryIds` 指定的媒体库详情页中禁用
+- `targetLibraryIds` 支持填写媒体库的 `Id`、`Guid` 或名称，但推荐优先填写 `Id`
+- 过滤的是**当前详情页**是否启用增强功能；如果进入的详情页不在目标媒体库中，剧照、预告片、相似影片、演员作品和番号增强都会跳过
+
+**如何获取媒体库 ID：**
+
+在 Emby 首页按 `F12` 打开开发者工具，在控制台执行：
+
+```javascript
+ApiClient.getUserViews({}, ApiClient.getCurrentUserId()).then(data => {
+    data.Items.forEach(lib => console.log(`${lib.Name}: ${lib.Id}`));
+});
 ```
 
 **功能说明：**
@@ -270,6 +297,14 @@ this.maxActorMoreItems = 10;
 // 只隐藏相似影片，保留演员作品
 this.enableSimilarItems = false;
 this.enableActorMoreItems = true;
+
+// 只在指定媒体库中生效
+this.libraryFilterMode = 'include';
+this.targetLibraryIds = ['abc123', 'def456'];
+
+// 排除指定媒体库
+this.libraryFilterMode = 'exclude';
+this.targetLibraryIds = ['xyz789'];
 ```
 
 **智能滚动说明：** ⭐ **新增功能**
