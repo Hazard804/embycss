@@ -1,80 +1,62 @@
-﻿/* =======================================================
-   Emby 全能版：支持海报(Portrait)、横图(Backdrop)及方图(Square)
-   功能：完美同步放大 + 蓝框 + 排除文字误触 + 按钮可点 + 不粘连
-   更新1：修复 MediaStreamPadder (详细信息卡片) 被误放大
-   更新2：新增对 SquareCard (正方形卡片) 的支持
+/* =======================================================
+   Emby 全能版：仅 PC 端 (支持鼠标悬停) 生效
+   功能：支持海报、横图、方图及 4:3 详情图同步放大
    ======================================================= */
 
-/* -------------------------------------------------------
-   1. 基础容器设置 
-   ------------------------------------------------------- */
-div.card.portraitCard .cardBox,
-div.card.squareCard .cardBox,   /* 新增：方图 */
-div.card.backdropCard .cardBox,
-div.card.smallBackdropCard .cardBox { 
-    overflow: visible !important;
-    /* 【核心】关闭父级感应，防止鼠标在文字区域触发放大 */
-    pointer-events: none; 
-}
+/* 使用 @media 限制：仅在屏幕宽度大于 1024px 且支持鼠标指针的设备上运行 */
+@media screen and (min-width: 1025px) and (hover: hover) {
 
-/* -------------------------------------------------------
-   2. 重新开启"图片"和"按钮层"的鼠标感应
-   ------------------------------------------------------- */
-div.card.portraitCard .cardContent, 
-div.card.portraitCard .cardOverlayContainer,
-div.card.squareCard .cardContent,          /* 新增：方图内容 */
-div.card.squareCard .cardOverlayContainer, /* 新增：方图遮罩 */
-div.card.backdropCard .cardContent, 
-div.card.backdropCard .cardOverlayContainer,
-div.card.smallBackdropCard .cardContent, 
-div.card.smallBackdropCard .cardOverlayContainer {
-    pointer-events: auto !important;
-}
+    /* 1. 基础容器设置 */
+    div.card.portraitCard .cardBox,
+    div.card.squareCard .cardBox,
+    div.card.backdropCard .cardBox,
+    div.card.smallBackdropCard .cardBox,
+    div.card.fourThreeCard .cardBox {
+        overflow: visible !important;
+        pointer-events: none; /* 关闭父级感应，防止文字区域触发 */
+    }
 
-/* -------------------------------------------------------
-   3. 触发逻辑：图片放大
-   ------------------------------------------------------- */
-/* 竖向海报 & 正方形卡片 (逻辑相同) */
-div.card.portraitCard .cardBox:hover .cardContent,
-div.card.squareCard .cardBox:hover .cardContent { /* 新增：方图触发 */
-    transform: scale(1.05);
-    box-shadow: 0 0 0 3px #00a4dc !important;
-    border-radius: 6px !important;
-    z-index: 10 !important;
-}
+    /* 2. 重新开启"图片"、"按钮层"及"底部操作按钮"的鼠标感应 */
+    div.card.portraitCard .cardContent,
+    div.card.portraitCard .cardOverlayContainer,
+    div.card.squareCard .cardContent,
+    div.card.squareCard .cardOverlayContainer,
+    div.card.backdropCard .cardContent,
+    div.card.backdropCard .cardOverlayContainer,
+    div.card.smallBackdropCard .cardContent,
+    div.card.smallBackdropCard .cardOverlayContainer,
+    div.card.fourThreeCard .cardContent,
+    div.card.fourThreeCard .cardOverlayContainer,
+    div.card .cardFooter .itemAction { /* 恢复搜索和删除按钮的点击感应 */
+        pointer-events: auto !important;
+    }
 
-/* 横向背景图 (Backdrop) - 排除文字信息卡片 */
-div.card.backdropCard .cardBox:hover .cardContent:not(.mediaStreamPadder),
-div.card.smallBackdropCard .cardBox:hover .cardContent:not(.mediaStreamPadder) {
-    transform: scale(1.05);
-    box-shadow: 0 0 0 3px #00a4dc !important;
-    border-radius: 6px !important;
-    z-index: 10 !important;
-}
+    /* 3. 触发逻辑：图片放大 */
+    div.card.portraitCard .cardBox:hover .cardContent,
+    div.card.squareCard .cardBox:hover .cardContent,
+    div.card.backdropCard .cardBox:hover .cardContent:not(.mediaStreamPadder),
+    div.card.smallBackdropCard .cardBox:hover .cardContent:not(.mediaStreamPadder),
+    div.card.fourThreeCard .cardBox:hover .cardContent {
+        transform: scale(1.05);
+        box-shadow: 0 0 0 3px #00a4dc !important;
+        border-radius: 6px !important;
+        z-index: 10 !important;
+    }
 
-/* -------------------------------------------------------
-   4. 触发逻辑：按钮层同步放大
-   ------------------------------------------------------- */
-/* 竖向 & 正方形 */
-div.card.portraitCard .cardBox:hover .cardOverlayContainer,
-div.card.squareCard .cardBox:hover .cardOverlayContainer { /* 新增：方图触发 */
-    transform: scale(1.05);
-    z-index: 20 !important;
-    border-radius: 6px !important;
-}
+    /* 4. 触发逻辑：按钮层同步放大 */
+    div.card.portraitCard .cardBox:hover .cardOverlayContainer,
+    div.card.squareCard .cardBox:hover .cardOverlayContainer,
+    div.card.backdropCard .cardBox:hover .cardOverlayContainer:not(.mediaStreamPadder),
+    div.card.smallBackdropCard .cardBox:hover .cardOverlayContainer:not(.mediaStreamPadder),
+    div.card.fourThreeCard .cardBox:hover .cardOverlayContainer {
+        transform: scale(1.05);
+        z-index: 20 !important;
+        border-radius: 6px !important;
+    }
 
-/* 横向 */
-div.card.backdropCard .cardBox:hover .cardOverlayContainer,
-div.card.smallBackdropCard .cardBox:hover .cardOverlayContainer {
-    transform: scale(1.05);
-    z-index: 20 !important;
-    border-radius: 6px !important;
-}
-
-/* -------------------------------------------------------
-   5. 通用动画过渡
-   ------------------------------------------------------- */
-div.card .cardContent,
-div.card .cardOverlayContainer {
-    transition: transform 0.25s cubic-bezier(0.175, 0.885, 0.32, 1.275), box-shadow 0.25s ease-in-out;
+    /* 5. 通用动画过渡 */
+    div.card .cardContent,
+    div.card .cardOverlayContainer {
+        transition: transform 0.25s cubic-bezier(0.175, 0.885, 0.32, 1.275), box-shadow 0.25s ease-in-out;
+    }
 }
