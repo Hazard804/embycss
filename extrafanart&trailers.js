@@ -1,4 +1,7 @@
 class ExtraFanart {
+	// ===== 性能优化：取消无效请求 =====
+	static currentAbortController = null;
+
 	static start() {
 		// ===== 配置选项 =====
 		// 是否启用网络链接容器显示功能（true=显示，false=隐藏）
@@ -50,6 +53,11 @@ class ExtraFanart {
 		this.cachedCodes = new Map(); // 缓存提取的番号
 		this.cachedImages = new Map(); // 缓存剧照数据 {endImageIndex, trailerUrl, imageTagMap}
 		this.cachedActorItems = new Map(); // 缓存演员作品数据
+		// 初始化 AbortController 用于取消异步请求
+		if (ExtraFanart.currentAbortController) {
+			ExtraFanart.currentAbortController.abort();
+		}
+		ExtraFanart.currentAbortController = new AbortController();
 
 		this.imageContainer = this.createImageContainer();
 		this.zoomedMask = this.createZoomedMask();
@@ -426,6 +434,7 @@ class ExtraFanart {
 		const imageElement = document.createElement('img');
 		imageElement.src = imageSrc;
 		imageElement.className = 'jv-image';
+		imageElement.decoding = 'async';
 		imageElement.onclick = () => {
 			this.currentZoomedImageIndex = index;
 			this.showZoomedMask(index);
@@ -441,7 +450,7 @@ class ExtraFanart {
 		const tag = this.imageTagMap.get(0);
 		const imageSrc = tag ? this.getBackgroundImageSrc(0) : '';
 		wrapper.innerHTML = `
-			<img src="${imageSrc || ''}" class="jv-image jv-trailer-thumb" />
+			<img src="${imageSrc || ''}" class="jv-image jv-trailer-thumb" decoding="async" />
 			<div class="jv-play-icon">
 				<svg viewBox="0 0 24 24" fill="white">
 					<circle cx="12" cy="12" r="10" fill="rgba(0,0,0,0.6)" stroke="white" stroke-width="2"/>
@@ -659,11 +668,11 @@ static isDetailsPage() {
 		hasCache: this.cachedSimilarItems.has(currentItemId)
 	});
 	
-	// 防抖：如果正在加载中，跳过
-	if (this.isLoading) {
-		console.log('[ExtraFanart] 正在加载中，跳过');
-		return;
+	// 1. 取消上一次未完成的请求（如果有）
+	if (this.currentAbortController) {
+		this.currentAbortController.abort();
 	}
+	this.currentAbortController = new AbortController();
 	
 	// 如果是同一个项目且不是页面刷新，确保容器可见
 	if (isSameItem && !this.isPageRefresh) {
@@ -832,15 +841,23 @@ static isDetailsPage() {
 			this.imageMap.clear();
 			this.imageTagMap.clear();
 			
-			// 获取图片数量和tag信息
-			this.endImageIndex = await this.getEndImageIndex();
-			// 获取预告片URL
-			this.trailerUrl = await this.getTrailerUrl(currentItemId);
+			// 并行化异步请求：同时获取图片数量和预告片URL
+			const [endImageIndex, trailerUrl] = await Promise.all([
+				this.getEndImageIndex(),
+				this.getTrailerUrl(currentItemId)
+			]);
+			this.endImageIndex = endImageIndex;
+			this.trailerUrl = trailerUrl;
 			
-			// 获取到预告片后立即预加载
+			// 获取到预告片后使用 requestIdleCallback 进行异步预加载
 			if (this.trailerUrl) {
 				this.trailerPreloaded = false;
-				setTimeout(() => this.preloadTrailer(), 100);
+				// 使用 requestIdleCallback 处理非关键任务，若浏览器不支持则回退到 setTimeout
+				if ('requestIdleCallback' in window) {
+					requestIdleCallback(() => this.preloadTrailer(), { timeout: 2000 });
+				} else {
+					setTimeout(() => this.preloadTrailer(), 100);
+				}
 			}
 			
 			await this.appendImagesToContainer(this.endImageIndex);
@@ -1506,7 +1523,7 @@ static isDetailsPage() {
 		
 		card.innerHTML = `
 			<div class="jv-similar-card-image ${hasTrailer ? 'has-trailer' : ''}">
-				<img src="${imgUrl}" alt="${name}" loading="lazy" />
+				<img src="${imgUrl}" alt="${name}" loading="lazy" decoding="async" />
 				<div class="jv-card-overlay"></div>
 			</div>
 			<div class="jv-similar-card-info">
@@ -3683,7 +3700,7 @@ static isDetailsPage() {
 			return `
 				<div class="jv-review-item">
 					<div class="jv-review-header">
-						<img class="jv-review-avatar" src="${avatar}" alt="${username}" onerror="this.src='data:image/svg+xml;base64,...'"/>
+						<img class="jv-review-avatar" src="${avatar}" alt="${username}" decoding="async" onerror="this.src='data:image/svg+xml;base64,...'"/>
 						<div class="jv-review-user-info">
 							<div class="jv-review-username">
 								${this.escapeHtml(username)}
@@ -3937,6 +3954,10 @@ static isDetailsPage() {
 				transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
 				background: rgba(0, 0, 0, 0.4);
 				border: 2px solid transparent;
+				will-change: transform;
+				contain: layout paint;
+				content-visibility: auto;
+				contain-intrinsic-size: 350px 280px;
 			}
 
 			.jv-similar-card:hover {
@@ -5359,7 +5380,7 @@ static isDetailsPage() {
 		
 		card.innerHTML = `
 			<div class="jv-similar-card-image ${hasTrailer ? 'has-trailer' : ''}">
-				<img src="${imgUrl}" alt="${name}" loading="lazy" />
+				<img src="${imgUrl}" alt="${name}" loading="lazy" decoding="async" />
 				<div class="jv-card-overlay"></div>
 			</div>
 			<div class="jv-similar-card-info">
