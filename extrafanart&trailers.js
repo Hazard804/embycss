@@ -6,45 +6,45 @@ class ExtraFanart {
 		// ===== 配置选项 =====
 		// 是否启用网络链接容器显示功能（true=显示，false=隐藏）
 		this.enableWebLinks = true;
-		
+
 		// 是否启用 JavDB 短评功能（true=启用，false=禁用）
 		// 启用后会在网络链接旁显示"短评"按钮，首次使用需要输入 JavDB 账号密码
 		// 账号密码会加密存储在浏览器本地，不会上传到任何服务器
 		this.enableJavdbReviews = true;
-		
+
 		// 是否启用相似影片功能（true=启用，false=禁用）
 		this.enableSimilarItems = true;
 		// 相似影片最多显示数量
 		this.maxSimilarItems = 20;
-		
+
 		// 是否启用演员其他作品功能（true=启用，false=禁用）
 		this.enableActorMoreItems = true;
 		// 演员其他作品最多显示数量（每个演员）
 		this.maxActorMoreItems = 20;
-		
+
 		// 媒体库过滤模式：
 		// all=全部媒体库生效
 		// include=仅指定媒体库生效
 		// exclude=排除指定媒体库
-		this.libraryFilterMode = 'all';
+		this.libraryFilterMode = 'include';
 		// 目标媒体库标识列表，支持填写媒体库的 Id、Guid 或名称（建议优先使用 Id）
-		this.targetLibraryIds = [];
+		this.targetLibraryIds = ['56481', '203669'];
 		// ===================
-		
+
 		// JavDB API 相关
 		this.JAVDB_CREDENTIALS_KEY = 'javdb_credentials'; // 加密凭据存储键名
 		this.javdbToken = localStorage.getItem('javdb_token') || null;
 		this.javdbTokenExpiry = localStorage.getItem('javdb_token_expiry') || null;
 		this.reviewsModal = null; // 短评弹窗
 		this.credentialsModal = null; // 凭据输入弹窗
-		
+
 		// JavDB 缓存配置
 		this.JAVDB_CACHE_KEY = 'javdb_cache'; // localStorage 键名
 		this.JAVDB_CACHE_MAX_SIZE = 500 * 1024; // 最大缓存大小 500KB
 		this.JAVDB_CACHE_MAX_ITEMS = 50; // 最大缓存条目数
 		this.JAVDB_CACHE_EXPIRY_HOURS = 24; // 缓存过期时间（小时）
 		this.javdbCache = this.loadJavdbCache(); // 从 localStorage 加载缓存
-		
+
 		this.startImageIndex = parseInt(localStorage.getItem('extraFanartStartIndex')) || 2;
 		this.endImageIndex = 0;
 		this.currentZoomedImageIndex = -1;
@@ -87,7 +87,7 @@ class ExtraFanart {
 	// ===== 性能优化：防抖和节流工具 =====
 	static debounce(func, delay) {
 		let timeoutId;
-		return function(...args) {
+		return function (...args) {
 			clearTimeout(timeoutId);
 			timeoutId = setTimeout(() => func.apply(this, args), delay);
 		};
@@ -96,7 +96,7 @@ class ExtraFanart {
 	static throttle(func, limit) {
 		let lastFunc;
 		let lastRan;
-		return function(...args) {
+		return function (...args) {
 			if (!lastRan) {
 				func.apply(this, args);
 				lastRan = Date.now();
@@ -138,7 +138,7 @@ class ExtraFanart {
 		});
 
 		const parentElement = document.querySelector(parentSelector) || document.body;
-		
+
 		observer.observe(parentElement, {
 			childList,
 			subtree,
@@ -161,7 +161,7 @@ class ExtraFanart {
 			}
 			callback(element);
 			// 如果元素已存在，返回空函数
-			return () => {};
+			return () => { };
 		}
 
 		return () => {
@@ -532,9 +532,9 @@ class ExtraFanart {
 	static getBackgroundImageSrc(index) {
 		const currentItemId = this.getCurrentItemId();
 		if (!currentItemId) return null;
-		
+
 		const tag = this.imageTagMap.get(index);
-		
+
 		if (typeof ApiClient !== 'undefined' && tag) {
 			// 使用 ApiClient 方法并带 tag 参数（适用于 Windows 客户端）
 			return ApiClient.getImageUrl(currentItemId, {
@@ -640,26 +640,26 @@ class ExtraFanart {
 		`;
 		return container;
 	}
-	
+
 	static convertYouTubeUrl(url) {
 		if (!url) return null;
-		
+
 		// 匹配各种 YouTube URL 格式
 		const patterns = [
 			/(?:youtube\.com\/watch\?v=|youtu\.be\/)([a-zA-Z0-9_-]{11})/,
 			/youtube\.com\/embed\/([a-zA-Z0-9_-]{11})/
 		];
-		
+
 		for (const pattern of patterns) {
 			const match = url.match(pattern);
 			if (match && match[1]) {
 				return `https://www.youtube.com/embed/${match[1]}?autoplay=1&mute=1`;
 			}
 		}
-		
+
 		return null;
 	}
-	
+
 	static isYouTubeUrl(url) {
 		return url && (url.includes('youtube.com') || url.includes('youtu.be'));
 	}
@@ -669,16 +669,16 @@ class ExtraFanart {
 		// 一次性读取所有需要的值
 		const maskClientWidth = this.zoomedMask.clientWidth;
 		const maskClientHeight = this.zoomedMask.clientHeight;
-		
+
 		// 获取可用空间，留出边距
 		const maxWidth = maskClientWidth * 0.9;
 		const maxHeight = maskClientHeight * 0.9;
-		
+
 		// 计算缩放比例，允许放大和缩小以适应窗口
 		const widthRatio = maxWidth / naturalWidth;
 		const heightRatio = maxHeight / naturalHeight;
 		const scale = Math.min(widthRatio, heightRatio); // 选择较小的缩放比例以保持宽高比
-		
+
 		return {
 			width: naturalWidth * scale,
 			height: naturalHeight * scale
@@ -706,11 +706,11 @@ class ExtraFanart {
 		if (!imageSrc) return;
 		const imageElement = this.imageMap.get(index);
 		if (!imageElement) return;
-		
+
 		// 淡出当前图片
 		this.zoomedImage.style.opacity = '0';
 		await new Promise(resolve => setTimeout(resolve, 200));
-		
+
 		// 预加载新图片
 		const newImage = new Image();
 		await new Promise((resolve, reject) => {
@@ -718,7 +718,7 @@ class ExtraFanart {
 			newImage.onerror = reject;
 			newImage.src = imageSrc;
 		});
-		
+
 		// 更新尺寸和位置，自适应窗口大小
 		const fitSize = this.calculateFitSize(newImage.naturalWidth, newImage.naturalHeight);
 		this.setRectOfElement(this.zoomedImageWrapper, {
@@ -727,11 +727,11 @@ class ExtraFanart {
 			width: fitSize.width,
 			height: fitSize.height
 		});
-		
+
 		// 更换图片源
 		this.zoomedImage.src = imageSrc;
 		this.setDescription();
-		
+
 		// 淡入新图片
 		await new Promise(resolve => setTimeout(resolve, 50));
 		this.zoomedImage.style.opacity = '1';
@@ -810,7 +810,7 @@ class ExtraFanart {
 	static createTrailerElement() {
 		const wrapper = document.createElement('div');
 		wrapper.className = 'jv-trailer-wrapper';
-		
+
 		// 预告片缩略图使用索引0的背景图
 		const tag = this.imageTagMap.get(0);
 		const imageSrc = tag ? this.getBackgroundImageSrc(0) : '';
@@ -824,24 +824,24 @@ class ExtraFanart {
 			</div>
 			<div class="jv-trailer-badge">预告片</div>
 		`;
-		
+
 		wrapper.onclick = () => {
 			const isYouTube = this.isYouTubeUrl(this.trailerUrl);
 			this.openVideoPlayer(this.trailerUrl, isYouTube);
 		};
-		
+
 		return wrapper;
 	}
 
 	static async appendImagesToContainer(imageCount) {
 		const imageFragment = document.createDocumentFragment();
-		
+
 		// 如果有预告片，先添加预告片
 		if (this.trailerUrl) {
 			const trailerElement = this.createTrailerElement();
 			imageFragment.appendChild(trailerElement);
 		}
-		
+
 		for (let index = this.startImageIndex; index <= imageCount; index++) {
 			const imageElement = this.createImageElement(index);
 			imageFragment.appendChild(imageElement);
@@ -851,7 +851,7 @@ class ExtraFanart {
 		if (gridContainer) {
 			gridContainer.appendChild(imageFragment);
 		}
-		
+
 		// 更新图片数量显示
 		const countElement = this.imageContainer.querySelector('.jv-image-count');
 		if (countElement) {
@@ -866,19 +866,19 @@ class ExtraFanart {
 		if (imageCount < this.startImageIndex && !this.trailerUrl) {
 			return;
 		}
-		
+
 		// 检查是否还在详情页
 		if (!this.isDetailsPage()) {
 			console.log('[ExtraFanart] 已离开详情页，取消显示剧照容器');
 			return;
 		}
-		
+
 		// 先尝试找演职人员区域作为锚点
 		const anchorSelectors = [
 			'#itemDetailPage:not(.hide) #castCollapsible',
 			'.itemView:not(.hide) .peopleSection'
 		];
-		
+
 		let anchorElement = null;
 		for (const selector of anchorSelectors) {
 			anchorElement = document.querySelector(selector);
@@ -886,27 +886,27 @@ class ExtraFanart {
 				break;
 			}
 		}
-		
+
 		if (!anchorElement) {
 			// 使用 MutationObserver 监听锚点元素出现，而不是递归轮询
 			console.log('[ExtraFanart] 未找到锚点元素，使用 MutationObserver 监听...');
-			
+
 			const detailPageSelectors = [
 				'#itemDetailPage:not(.hide)',
 				'.itemView:not(.hide)'
 			];
-			
+
 			let detailPageParent = null;
 			for (const selector of detailPageSelectors) {
 				detailPageParent = document.querySelector(selector);
 				if (detailPageParent) break;
 			}
-			
+
 			if (!detailPageParent) {
 				console.log('[ExtraFanart] 详情页不存在，监听详情页出现...');
 				detailPageParent = document.body;
 			}
-			
+
 			// 使用 MutationObserver 替代递归 setTimeout
 			this.observeElementAppear(
 				'#itemDetailPage:not(.hide) #castCollapsible, .itemView:not(.hide) .peopleSection',
@@ -926,7 +926,7 @@ class ExtraFanart {
 			);
 			return;
 		}
-		
+
 		this.insertContainerAfterAnchor(imageCount, anchorElement);
 	}
 
@@ -936,22 +936,22 @@ class ExtraFanart {
 			console.log('[ExtraFanart] 已离开详情页，取消显示剧照容器');
 			return;
 		}
-		
+
 		// 确保容器在正确的详情页DOM中
 		const detailPage = document.querySelector('#itemDetailPage:not(.hide), .itemView:not(.hide)');
 		const isInCorrectPage = detailPage && detailPage.contains(this.imageContainer);
-		
+
 		// 如果容器不在正确的详情页中，需要重新插入
 		if (!isInCorrectPage && this.imageContainer.parentNode) {
 			this.imageContainer.parentNode.removeChild(this.imageContainer);
 		}
-		
+
 		// 检查容器是否已经在DOM中
 		if (!document.body.contains(this.imageContainer)) {
 			// 直接插入到锚点元素之后
 			anchorElement.insertAdjacentElement('afterend', this.imageContainer);
 		}
-		
+
 		// 内容加载完成，显示容器
 		this.imageContainer.style.display = 'block';
 		// 标记容器属于哪个 itemId
@@ -959,9 +959,9 @@ class ExtraFanart {
 		console.log('[ExtraFanart] 剧照容器已显示, itemId:', this.itemId);
 	}
 
-static isDetailsPage() {
-	return location.hash.includes('/details?id=') || location.hash.includes('/item?id=');
-}
+	static isDetailsPage() {
+		return location.hash.includes('/details?id=') || location.hash.includes('/item?id=');
+	}
 
 	static async getItemDetails(itemId) {
 		if (!itemId || typeof ApiClient === 'undefined') {
@@ -1009,7 +1009,7 @@ static isDetailsPage() {
 				console.warn('获取图片数量失败，使用二分查找:', error);
 			}
 		}
-		
+
 		// 二分查找图片数量
 		let left = this.startImageIndex;
 		let right = this.startImageIndex + 20;
@@ -1033,281 +1033,281 @@ static isDetailsPage() {
 		if (!this.isDetailsPage()) return;
 		const currentItemId = this.getCurrentItemId();
 		if (!currentItemId) return;
-		
+
 		// 检查是否为同一个项目的重复加载
 		const isSameItem = this.itemId === currentItemId;
-		
-	console.log('[ExtraFanart] loadImages 调用', {
-		currentItemId,
-		isSameItem,
-		isPageRefresh: this.isPageRefresh,
-		isLoading: this.isLoading,
-		hasCache: this.cachedSimilarItems.has(currentItemId)
-	});
-	
-	// 1. 取消上一次未完成的请求（如果有）
-	if (this.currentAbortController) {
-		this.currentAbortController.abort();
-	}
-	this.currentAbortController = new AbortController();
 
-	if (this.isLibraryFilterEnabled() && this.itemId && this.itemId !== currentItemId) {
-		this.hideInjectedContainers();
-	}
-
-	const currentItemDetails = await this.getItemDetails(currentItemId);
-	const libraryCheck = await this.isItemLibraryAllowed(currentItemId, currentItemDetails);
-	if (!libraryCheck.allowed) {
-		this.itemId = currentItemId;
-		this.itemDetails = currentItemDetails;
-		this.hideInjectedContainers();
-		console.log('[ExtraFanart] 当前媒体库不在生效范围内，跳过增强', {
-			itemId: currentItemId,
-			libraryName: libraryCheck.library?.Name,
-			libraryId: libraryCheck.library?.Id
+		console.log('[ExtraFanart] loadImages 调用', {
+			currentItemId,
+			isSameItem,
+			isPageRefresh: this.isPageRefresh,
+			isLoading: this.isLoading,
+			hasCache: this.cachedSimilarItems.has(currentItemId)
 		});
-		return;
-	}
-	
-	// 如果是同一个项目且不是页面刷新，确保容器可见
-	if (isSameItem && !this.isPageRefresh) {
-		console.log('[ExtraFanart] 页面内导航，同一项目，确保容器可见');
-		
-		// 确保剧照容器在DOM中且可见且在正确位置
-		const detailPage = document.querySelector('#itemDetailPage:not(.hide), .itemView:not(.hide)');
-		const imageInCorrectPage = this.imageContainer && detailPage && detailPage.contains(this.imageContainer);
-		
-		if (!imageInCorrectPage) {
-			console.log('[ExtraFanart] 剧照容器需要恢复');
-			this.showContainer(this.endImageIndex);
+
+		// 1. 取消上一次未完成的请求（如果有）
+		if (this.currentAbortController) {
+			this.currentAbortController.abort();
 		}
-		
-		// 延迟恢复相似影片、演员作品和番号，确保剧照容器先稳定
-		setTimeout(() => {
-			// 再次检查 itemId，确保没有切换到其他页面
-			if (this.itemId !== currentItemId) return;
-			
-			// 再次确认剧照容器在正确位置
-			const detailPageCheck = document.querySelector('#itemDetailPage:not(.hide), .itemView:not(.hide)');
-			const imageContainerReady = this.imageContainer && 
-			                            detailPageCheck && 
-			                            detailPageCheck.contains(this.imageContainer) &&
-			                            this.imageContainer.style.display === 'block';
-			
-			if (!imageContainerReady) {
-				console.log('[ExtraFanart] 剧照容器未就绪，取消恢复其他容器');
-				return;
-			}
-			
-			// 检查并恢复相似影片、演员作品和番号容器（如果有缓存且不在DOM中）
-			const hasSimilarCache = this.cachedSimilarItems.has(currentItemId);
-			const hasActorCache = this.cachedActorItems.has(currentItemId);
-			const hasCodeCache = this.cachedCodes.has(currentItemId);
-			
-			// 如果有缓存，检查容器是否需要恢复显示
-			// 注意：相似影片和演员作品需要按顺序恢复，避免DOM查找冲突
-			if (hasSimilarCache) {
-				const detailPage = document.querySelector('#itemDetailPage:not(.hide), .itemView:not(.hide)');
-				const inCorrectPage = this.similarContainer && detailPage && detailPage.contains(this.similarContainer);
-				const isVisible = this.similarContainer && this.similarContainer.style.display === 'block';
-				const needsRestore = !inCorrectPage || !isVisible;
-				
-				if (needsRestore) {
-					console.log('[ExtraFanart] 相似影片容器需要恢复', { inCorrectPage, isVisible });
-					this.displayCachedSimilarItems(currentItemId);
-				}
-			}
-			
-			if (hasActorCache) {
-				// 检查是否有任何演员容器在正确的详情页中且可见
-				const detailPage = document.querySelector('#itemDetailPage:not(.hide), .itemView:not(.hide)');
-				let anyActorVisible = false;
-				
-				for (let i = 0; i < 3; i++) {
-					const containerId = i === 0 ? 'jv-actor-container' : `jv-actor-container-${i}`;
-					const actorContainer = document.querySelector(`#${containerId}`);
-					if (actorContainer && 
-					    detailPage && detailPage.contains(actorContainer) && 
-					    actorContainer.style.display === 'block') {
-						anyActorVisible = true;
-						break;
-					}
-				}
-				
-				if (!anyActorVisible) {
-					console.log('[ExtraFanart] 演员作品容器需要恢复');
-					// 再延迟一点，让相似影片先完成插入，避免DOM查找冲突
-					setTimeout(() => {
-						// 再次检查 itemId 是否还匹配
-						if (this.itemId === currentItemId) {
-							this.displayCachedActorItems(currentItemId);
-						}
-					}, 50);
-				}
-			}
-			
-			// 恢复番号和网络链接（如果有缓存且不在DOM中）
-			if (hasCodeCache) {
-				console.log('[ExtraFanart] 检查番号和网络链接是否需要恢复');
-				// 检查番号元素是否存在
-				const titleSelectors = [
-					'.detailPagePrimaryContainer h1',
-					'.itemView:not(.hide) .nameContainer .itemName',
-					'.detailPagePrimaryContainer .itemName',
-					'#itemDetailPage:not(.hide) .nameContainer .itemName',
-					'.nameContainer .itemName',
-					'.detailPageContent h1',
-					'.detailPagePrimaryTitle',
-					'.detailPageWatchContainer + div h1',
-					'.detailPageWatchContainer ~ div h1',
-					'.mainDetailButtons + div h1',
-					'div[data-role="page"]:not(.hide) h1',
-					'div[data-role="page"]:not(.hide) .itemName',
-					'.page:not(.hide) h1',
-					'.page:not(.hide) .itemName',
-					'h1',
-					'.itemName'
-				];
-				
-				let titleElement = null;
-				for (const selector of titleSelectors) {
-					const el = document.querySelector(selector);
-					if (el && el.textContent.trim()) {
-						titleElement = el;
-						break;
-					}
-				}
-				
-				if (titleElement) {
-					const existingCode = titleElement.querySelector('.jv-copy-code');
-					const existingLinksContainer = titleElement.parentElement?.querySelector('.jv-web-links-container');
-					const cachedCodeInfo = this.cachedCodes.get(currentItemId);
-					
-					// 如果番号或网络链接缺失，重新显示
-					if (!existingCode || (this.enableWebLinks && cachedCodeInfo.webLinks && cachedCodeInfo.webLinks.length > 0 && !existingLinksContainer)) {
-						console.log('[ExtraFanart] 番号或网络链接缺失，重新显示', { hasCode: !!existingCode, hasLinks: !!existingLinksContainer });
-						this.displayCachedCode(currentItemId);
-					}
-				}
-			}
-		}, 150);
-		
-		return;
-	}	this.isLoading = true;
-	
-	try {
-		// 先更新itemId
-		const oldItemId = this.itemId;
-		this.itemId = currentItemId;
-		this.itemDetails = currentItemDetails;
-		
-		// 如果切换到新的itemId，立即隐藏所有旧容器，防止显示旧内容
-		if (oldItemId !== currentItemId) {
-			console.log('[ExtraFanart] 切换itemId，隐藏旧容器');
-			if (this.similarContainer) {
-				this.similarContainer.style.display = 'none';
-			}
-			// 隐藏所有演员容器
-			for (let i = 0; i < 3; i++) {
-				const containerId = i === 0 ? '#jv-actor-container' : `#jv-actor-container-${i}`;
-				const actorContainer = document.querySelector(containerId);
-				if (actorContainer) {
-					actorContainer.style.display = 'none';
-				}
-			}
+		this.currentAbortController = new AbortController();
+
+		if (this.isLibraryFilterEnabled() && this.itemId && this.itemId !== currentItemId) {
+			this.hideInjectedContainers();
 		}
-		
-		// 检查各个模块的缓存状态
-		const hasImageCache = this.cachedImages.has(currentItemId);
-		const hasSimilarCache = this.cachedSimilarItems.has(currentItemId);
-		const hasCodeCache = this.cachedCodes.has(currentItemId);
-		const hasActorCache = this.cachedActorItems.has(currentItemId);
-		
-		// 如果不是页面刷新且有剧照缓存，使用缓存
-		if (!this.isPageRefresh && hasImageCache) {
-			console.log('[ExtraFanart] 使用缓存的剧照数据');
-			this.restoreCachedImages(currentItemId);
-		} else {
-			console.log('[ExtraFanart] 加载新的剧照数据');
-			// 清空旧数据
-			const gridContainer = this.imageContainer.querySelector('.jv-images-grid');
-			if (gridContainer) {
-				gridContainer.innerHTML = '';
-			}
-			this.imageMap.clear();
-			this.imageTagMap.clear();
-			
-			// 并行化异步请求：同时获取图片数量和预告片URL
-			const [endImageIndex, trailerUrl] = await Promise.all([
-				this.getEndImageIndex(currentItemId, currentItemDetails),
-				this.getTrailerUrl(currentItemId, currentItemDetails)
-			]);
-			this.endImageIndex = endImageIndex;
-			this.trailerUrl = trailerUrl;
-			
-			// 获取到预告片后使用 requestIdleCallback 进行异步预加载
-			if (this.trailerUrl) {
-				this.trailerPreloaded = false;
-				// 使用 requestIdleCallback 处理非关键任务，若浏览器不支持则回退到 setTimeout
-				if ('requestIdleCallback' in window) {
-					requestIdleCallback(() => this.preloadTrailer(), { timeout: 2000 });
-				} else {
-					setTimeout(() => this.preloadTrailer(), 100);
-				}
-			}
-			
-			await this.appendImagesToContainer(this.endImageIndex);
-			
-			// 只有当有剧照或预告片时才显示容器
-			if (this.endImageIndex > 0 || this.trailerUrl) {
+
+		const currentItemDetails = await this.getItemDetails(currentItemId);
+		const libraryCheck = await this.isItemLibraryAllowed(currentItemId, currentItemDetails);
+		if (!libraryCheck.allowed) {
+			this.itemId = currentItemId;
+			this.itemDetails = currentItemDetails;
+			this.hideInjectedContainers();
+			console.log('[ExtraFanart] 当前媒体库不在生效范围内，跳过增强', {
+				itemId: currentItemId,
+				libraryName: libraryCheck.library?.Name,
+				libraryId: libraryCheck.library?.Id
+			});
+			return;
+		}
+
+		// 如果是同一个项目且不是页面刷新，确保容器可见
+		if (isSameItem && !this.isPageRefresh) {
+			console.log('[ExtraFanart] 页面内导航，同一项目，确保容器可见');
+
+			// 确保剧照容器在DOM中且可见且在正确位置
+			const detailPage = document.querySelector('#itemDetailPage:not(.hide), .itemView:not(.hide)');
+			const imageInCorrectPage = this.imageContainer && detailPage && detailPage.contains(this.imageContainer);
+
+			if (!imageInCorrectPage) {
+				console.log('[ExtraFanart] 剧照容器需要恢复');
 				this.showContainer(this.endImageIndex);
 			}
-			
-			// 缓存剧照数据
-			this.cachedImages.set(currentItemId, {
-				endImageIndex: this.endImageIndex,
-				trailerUrl: this.trailerUrl,
-				imageTagMap: new Map(this.imageTagMap)
-			});
-			console.log('[ExtraFanart] 剧照数据已缓存');
-		}
-			
+
+			// 延迟恢复相似影片、演员作品和番号，确保剧照容器先稳定
+			setTimeout(() => {
+				// 再次检查 itemId，确保没有切换到其他页面
+				if (this.itemId !== currentItemId) return;
+
+				// 再次确认剧照容器在正确位置
+				const detailPageCheck = document.querySelector('#itemDetailPage:not(.hide), .itemView:not(.hide)');
+				const imageContainerReady = this.imageContainer &&
+					detailPageCheck &&
+					detailPageCheck.contains(this.imageContainer) &&
+					this.imageContainer.style.display === 'block';
+
+				if (!imageContainerReady) {
+					console.log('[ExtraFanart] 剧照容器未就绪，取消恢复其他容器');
+					return;
+				}
+
+				// 检查并恢复相似影片、演员作品和番号容器（如果有缓存且不在DOM中）
+				const hasSimilarCache = this.cachedSimilarItems.has(currentItemId);
+				const hasActorCache = this.cachedActorItems.has(currentItemId);
+				const hasCodeCache = this.cachedCodes.has(currentItemId);
+
+				// 如果有缓存，检查容器是否需要恢复显示
+				// 注意：相似影片和演员作品需要按顺序恢复，避免DOM查找冲突
+				if (hasSimilarCache) {
+					const detailPage = document.querySelector('#itemDetailPage:not(.hide), .itemView:not(.hide)');
+					const inCorrectPage = this.similarContainer && detailPage && detailPage.contains(this.similarContainer);
+					const isVisible = this.similarContainer && this.similarContainer.style.display === 'block';
+					const needsRestore = !inCorrectPage || !isVisible;
+
+					if (needsRestore) {
+						console.log('[ExtraFanart] 相似影片容器需要恢复', { inCorrectPage, isVisible });
+						this.displayCachedSimilarItems(currentItemId);
+					}
+				}
+
+				if (hasActorCache) {
+					// 检查是否有任何演员容器在正确的详情页中且可见
+					const detailPage = document.querySelector('#itemDetailPage:not(.hide), .itemView:not(.hide)');
+					let anyActorVisible = false;
+
+					for (let i = 0; i < 3; i++) {
+						const containerId = i === 0 ? 'jv-actor-container' : `jv-actor-container-${i}`;
+						const actorContainer = document.querySelector(`#${containerId}`);
+						if (actorContainer &&
+							detailPage && detailPage.contains(actorContainer) &&
+							actorContainer.style.display === 'block') {
+							anyActorVisible = true;
+							break;
+						}
+					}
+
+					if (!anyActorVisible) {
+						console.log('[ExtraFanart] 演员作品容器需要恢复');
+						// 再延迟一点，让相似影片先完成插入，避免DOM查找冲突
+						setTimeout(() => {
+							// 再次检查 itemId 是否还匹配
+							if (this.itemId === currentItemId) {
+								this.displayCachedActorItems(currentItemId);
+							}
+						}, 50);
+					}
+				}
+
+				// 恢复番号和网络链接（如果有缓存且不在DOM中）
+				if (hasCodeCache) {
+					console.log('[ExtraFanart] 检查番号和网络链接是否需要恢复');
+					// 检查番号元素是否存在
+					const titleSelectors = [
+						'.detailPagePrimaryContainer h1',
+						'.itemView:not(.hide) .nameContainer .itemName',
+						'.detailPagePrimaryContainer .itemName',
+						'#itemDetailPage:not(.hide) .nameContainer .itemName',
+						'.nameContainer .itemName',
+						'.detailPageContent h1',
+						'.detailPagePrimaryTitle',
+						'.detailPageWatchContainer + div h1',
+						'.detailPageWatchContainer ~ div h1',
+						'.mainDetailButtons + div h1',
+						'div[data-role="page"]:not(.hide) h1',
+						'div[data-role="page"]:not(.hide) .itemName',
+						'.page:not(.hide) h1',
+						'.page:not(.hide) .itemName',
+						'h1',
+						'.itemName'
+					];
+
+					let titleElement = null;
+					for (const selector of titleSelectors) {
+						const el = document.querySelector(selector);
+						if (el && el.textContent.trim()) {
+							titleElement = el;
+							break;
+						}
+					}
+
+					if (titleElement) {
+						const existingCode = titleElement.querySelector('.jv-copy-code');
+						const existingLinksContainer = titleElement.parentElement?.querySelector('.jv-web-links-container');
+						const cachedCodeInfo = this.cachedCodes.get(currentItemId);
+
+						// 如果番号或网络链接缺失，重新显示
+						if (!existingCode || (this.enableWebLinks && cachedCodeInfo.webLinks && cachedCodeInfo.webLinks.length > 0 && !existingLinksContainer)) {
+							console.log('[ExtraFanart] 番号或网络链接缺失，重新显示', { hasCode: !!existingCode, hasLinks: !!existingLinksContainer });
+							this.displayCachedCode(currentItemId);
+						}
+					}
+				}
+			}, 150);
+
+			return;
+		} this.isLoading = true;
+
+		try {
+			// 先更新itemId
+			const oldItemId = this.itemId;
+			this.itemId = currentItemId;
+			this.itemDetails = currentItemDetails;
+
+			// 如果切换到新的itemId，立即隐藏所有旧容器，防止显示旧内容
+			if (oldItemId !== currentItemId) {
+				console.log('[ExtraFanart] 切换itemId，隐藏旧容器');
+				if (this.similarContainer) {
+					this.similarContainer.style.display = 'none';
+				}
+				// 隐藏所有演员容器
+				for (let i = 0; i < 3; i++) {
+					const containerId = i === 0 ? '#jv-actor-container' : `#jv-actor-container-${i}`;
+					const actorContainer = document.querySelector(containerId);
+					if (actorContainer) {
+						actorContainer.style.display = 'none';
+					}
+				}
+			}
+
+			// 检查各个模块的缓存状态
+			const hasImageCache = this.cachedImages.has(currentItemId);
+			const hasSimilarCache = this.cachedSimilarItems.has(currentItemId);
+			const hasCodeCache = this.cachedCodes.has(currentItemId);
+			const hasActorCache = this.cachedActorItems.has(currentItemId);
+
+			// 如果不是页面刷新且有剧照缓存，使用缓存
+			if (!this.isPageRefresh && hasImageCache) {
+				console.log('[ExtraFanart] 使用缓存的剧照数据');
+				this.restoreCachedImages(currentItemId);
+			} else {
+				console.log('[ExtraFanart] 加载新的剧照数据');
+				// 清空旧数据
+				const gridContainer = this.imageContainer.querySelector('.jv-images-grid');
+				if (gridContainer) {
+					gridContainer.innerHTML = '';
+				}
+				this.imageMap.clear();
+				this.imageTagMap.clear();
+
+				// 并行化异步请求：同时获取图片数量和预告片URL
+				const [endImageIndex, trailerUrl] = await Promise.all([
+					this.getEndImageIndex(currentItemId, currentItemDetails),
+					this.getTrailerUrl(currentItemId, currentItemDetails)
+				]);
+				this.endImageIndex = endImageIndex;
+				this.trailerUrl = trailerUrl;
+
+				// 获取到预告片后使用 requestIdleCallback 进行异步预加载
+				if (this.trailerUrl) {
+					this.trailerPreloaded = false;
+					// 使用 requestIdleCallback 处理非关键任务，若浏览器不支持则回退到 setTimeout
+					if ('requestIdleCallback' in window) {
+						requestIdleCallback(() => this.preloadTrailer(), { timeout: 2000 });
+					} else {
+						setTimeout(() => this.preloadTrailer(), 100);
+					}
+				}
+
+				await this.appendImagesToContainer(this.endImageIndex);
+
+				// 只有当有剧照或预告片时才显示容器
+				if (this.endImageIndex > 0 || this.trailerUrl) {
+					this.showContainer(this.endImageIndex);
+				}
+
+				// 缓存剧照数据
+				this.cachedImages.set(currentItemId, {
+					endImageIndex: this.endImageIndex,
+					trailerUrl: this.trailerUrl,
+					imageTagMap: new Map(this.imageTagMap)
+				});
+				console.log('[ExtraFanart] 剧照数据已缓存');
+			}
+
 			// 并行加载相似影片、番号和演员作品，有缓存用缓存，没有就加载
-		setTimeout(() => {
-			const promises = [];
-			
-			// 相似影片
-			if (!this.isPageRefresh && hasSimilarCache) {
-				console.log('[ExtraFanart] 使用缓存的相似影片');
-				this.displayCachedSimilarItems(currentItemId);
-			} else {
-				console.log('[ExtraFanart] 加载新的相似影片');
-				promises.push(this.loadSimilarItems().catch(err => console.error('[ExtraFanart] 相似影片加载失败:', err)));
-			}
-			
-			// 番号提取
-			if (!this.isPageRefresh && hasCodeCache) {
-				console.log('[ExtraFanart] 使用缓存的番号');
-				this.displayCachedCode(currentItemId);
-			} else {
-				console.log('[ExtraFanart] 提取新的番号');
-				promises.push(this.extractAndDisplayCode().catch(err => console.error('[ExtraFanart] 番号提取失败:', err)));
-			}
-			
-			// 演员作品
-			if (!this.isPageRefresh && hasActorCache) {
-				console.log('[ExtraFanart] 使用缓存的演员作品');
-				this.displayCachedActorItems(currentItemId);
-			} else {
-				console.log('[ExtraFanart] 加载新的演员作品');
-				promises.push(this.loadActorMoreItems().catch(err => console.error('[ExtraFanart] 演员作品加载失败:', err)));
-			}
-			
-			if (promises.length > 0) {
-				Promise.all(promises);
-			}
-		}, 200);
-			
+			setTimeout(() => {
+				const promises = [];
+
+				// 相似影片
+				if (!this.isPageRefresh && hasSimilarCache) {
+					console.log('[ExtraFanart] 使用缓存的相似影片');
+					this.displayCachedSimilarItems(currentItemId);
+				} else {
+					console.log('[ExtraFanart] 加载新的相似影片');
+					promises.push(this.loadSimilarItems().catch(err => console.error('[ExtraFanart] 相似影片加载失败:', err)));
+				}
+
+				// 番号提取
+				if (!this.isPageRefresh && hasCodeCache) {
+					console.log('[ExtraFanart] 使用缓存的番号');
+					this.displayCachedCode(currentItemId);
+				} else {
+					console.log('[ExtraFanart] 提取新的番号');
+					promises.push(this.extractAndDisplayCode().catch(err => console.error('[ExtraFanart] 番号提取失败:', err)));
+				}
+
+				// 演员作品
+				if (!this.isPageRefresh && hasActorCache) {
+					console.log('[ExtraFanart] 使用缓存的演员作品');
+					this.displayCachedActorItems(currentItemId);
+				} else {
+					console.log('[ExtraFanart] 加载新的演员作品');
+					promises.push(this.loadActorMoreItems().catch(err => console.error('[ExtraFanart] 演员作品加载失败:', err)));
+				}
+
+				if (promises.length > 0) {
+					Promise.all(promises);
+				}
+			}, 200);
+
 			console.log('[ExtraFanart] 加载完成');
 		} catch (error) {
 			console.error('[ExtraFanart] 加载失败:', error);
@@ -1353,10 +1353,10 @@ static isDetailsPage() {
 	static handleResize() {
 		// 如果当前有放大的图片，重新调整其尺寸
 		if (this.currentZoomedImageIndex === -1) return;
-		
+
 		const imageElement = this.imageMap.get(this.currentZoomedImageIndex);
 		if (!imageElement) return;
-		
+
 		const fitSize = this.calculateFitSize(imageElement.naturalWidth, imageElement.naturalHeight);
 		this.setRectOfElement(this.zoomedImageWrapper, {
 			left: (this.zoomedMask.clientWidth - fitSize.width) / 2,
@@ -1379,7 +1379,7 @@ static isDetailsPage() {
 				resizeRAFId = null;
 			});
 		};
-		
+
 		// 监听页面显示事件（页面内导航）
 		document.addEventListener('viewshow', () => {
 			if (!ExtraFanart.isLoading) {
@@ -1390,7 +1390,7 @@ static isDetailsPage() {
 				setTimeout(() => ExtraFanart.loadImages(), 400);
 			}
 		});
-		
+
 		// 监听 URL hash 变化（页面内导航）
 		window.addEventListener('hashchange', () => {
 			if (!ExtraFanart.isLoading) {
@@ -1400,24 +1400,24 @@ static isDetailsPage() {
 				setTimeout(() => ExtraFanart.loadImages(), 100);
 			}
 		});
-		
+
 		// 监听页面卸载前事件，用于检测真正的页面刷新
 		window.addEventListener('beforeunload', () => {
 			sessionStorage.setItem('jv-page-refreshed', 'true');
 		});
-		
+
 		// 检查是否为页面刷新
 		if (sessionStorage.getItem('jv-page-refreshed') === 'true') {
 			console.log('[ExtraFanart] 检测到页面刷新');
 			ExtraFanart.isPageRefresh = true;
 			sessionStorage.removeItem('jv-page-refreshed');
 		}
-		
+
 		document.addEventListener('keydown', (e) => this.handleKeydown(e));
-		
+
 		// 使用 requestAnimationFrame 节流 resize 事件
 		window.addEventListener('resize', debouncedHandleResize);
-		
+
 		this.leftButton.addEventListener('click', (e) => this.handleLeftButtonClick(e));
 		this.rightButton.addEventListener('click', (e) => this.handleRightButtonClick(e));
 		this.zoomedMask.addEventListener('click', () => this.hideZoomedMask());
@@ -1436,13 +1436,13 @@ static isDetailsPage() {
 
 	static preloadTrailer() {
 		if (!this.trailerUrl || this.trailerPreloaded) return;
-		
+
 		// YouTube 视频不需要预加载
 		if (this.isYouTubeUrl(this.trailerUrl)) {
 			this.trailerPreloaded = true;
 			return;
 		}
-		
+
 		const video = this.videoPlayer.querySelector('#jv-video source');
 		const videoElement = this.videoPlayer.querySelector('#jv-video');
 		video.src = this.trailerUrl;
@@ -1454,11 +1454,11 @@ static isDetailsPage() {
 
 	static async openVideoPlayer(trailerUrl, isYouTube) {
 		if (!trailerUrl) return;
-		
+
 		const videoElement = this.videoPlayer.querySelector('#jv-video');
 		const iframeElement = this.videoPlayer.querySelector('#jv-video-iframe');
 		const videoContent = this.videoPlayer.querySelector('.jv-video-content');
-		
+
 		if (isYouTube) {
 			// 使用 iframe 播放 YouTube 视频
 			const embedUrl = this.convertYouTubeUrl(trailerUrl);
@@ -1480,20 +1480,20 @@ static isDetailsPage() {
 			videoElement.volume = 0;
 			videoElement.play();
 		}
-		
+
 		// 设置初始状态
 		this.videoPlayer.style.display = 'flex';
 		this.videoPlayer.style.opacity = '0';
 		videoContent.style.transform = 'scale(0.9)';
-		
+
 		// 触发重排
 		await new Promise(resolve => requestAnimationFrame(resolve));
-		
+
 		// 添加过渡类
 		this.videoPlayer.classList.add('jv-video-opening');
 		this.videoPlayer.style.opacity = '1';
 		videoContent.style.transform = 'scale(1)';
-		
+
 		// 动画完成后移除过渡类
 		setTimeout(() => {
 			this.videoPlayer.classList.remove('jv-video-opening');
@@ -1504,23 +1504,23 @@ static isDetailsPage() {
 		const videoElement = this.videoPlayer.querySelector('#jv-video');
 		const iframeElement = this.videoPlayer.querySelector('#jv-video-iframe');
 		const videoContent = this.videoPlayer.querySelector('.jv-video-content');
-		
+
 		// 添加关闭动画
 		this.videoPlayer.classList.add('jv-video-closing');
 		this.videoPlayer.style.opacity = '0';
 		videoContent.style.transform = 'scale(0.9)';
-		
+
 		// 等待动画完成
 		await new Promise(resolve => setTimeout(resolve, 250));
-		
+
 		// 停止播放并隐藏
 		videoElement.pause();
 		videoElement.currentTime = 0;
 		iframeElement.src = '';
-		
+
 		this.videoPlayer.style.display = 'none';
 		this.videoPlayer.classList.remove('jv-video-closing');
-		
+
 		// 重置状态
 		videoContent.style.transform = 'scale(1)';
 		videoElement.style.display = 'block';
@@ -1531,7 +1531,7 @@ static isDetailsPage() {
 		document.body.appendChild(this.zoomedMask);
 		document.body.appendChild(this.videoPlayer);
 		this.registerEventListeners();
-		
+
 		// 视频播放器事件
 		const closeBtn = this.videoPlayer.querySelector('.jv-video-close');
 		closeBtn.addEventListener('click', () => this.closeVideoPlayer());
@@ -1549,25 +1549,25 @@ static isDetailsPage() {
 			console.log('[ExtraFanart] 相似影片功能已禁用');
 			return;
 		}
-		
+
 		if (!this.itemId || typeof ApiClient === 'undefined') return;
-		
+
 		// 立即隐藏容器，避免显示旧内容或空白框
 		if (this.similarContainer) {
 			this.similarContainer.style.display = 'none';
 			this.similarContainer.removeAttribute('data-item-id');
 		}
-		
+
 		// 检查是否还在详情页
 		if (!this.isDetailsPage()) {
 			console.log('[ExtraFanart] 已离开详情页，取消加载相似影片');
 			return;
 		}
-		
+
 		try {
 			const item = await this.getItemDetails(this.itemId);
 			if (!item || item.Type !== 'Movie') return;
-			
+
 			const options = {
 				Limit: 50,
 				UserId: ApiClient.getCurrentUserId(),
@@ -1575,10 +1575,10 @@ static isDetailsPage() {
 				Fields: "BasicSyncInfo,CanDelete,PrimaryImageAspectRatio,ProductionYear,Status,EndDate,LocalTrailerCount,RemoteTrailers,RunTimeTicks,CommunityRating",
 				EnableTotalRecordCount: false
 			};
-			
+
 			const result = await ApiClient.getSimilarItems(this.itemId, options);
 			if (!result || !result.Items || result.Items.length === 0) return;
-			
+
 			// 带权重的随机排序
 			const weightFactor = -0.1;
 			const shuffled = result.Items
@@ -1589,92 +1589,92 @@ static isDetailsPage() {
 				.sort((a, b) => a.sortKey - b.sortKey)
 				.map(entry => entry.item)
 				.slice(0, this.maxSimilarItems);
-			
-		// 保存加载时的 itemId，用于后续检查
-		const loadedItemId = this.itemId;
-		
-		// 无论是否在详情页，都先缓存数据，以便返回时恢复
-		this.cachedSimilarItems.set(loadedItemId, shuffled);
-		console.log('[ExtraFanart] 相似影片已缓存');
-		
-		// 检查是否还在详情页（异步加载期间用户可能离开）
-		if (!this.isDetailsPage()) {
-			console.log('[ExtraFanart] 加载完成后检查：已离开详情页，数据已缓存但取消显示');
-			return;
+
+			// 保存加载时的 itemId，用于后续检查
+			const loadedItemId = this.itemId;
+
+			// 无论是否在详情页，都先缓存数据，以便返回时恢复
+			this.cachedSimilarItems.set(loadedItemId, shuffled);
+			console.log('[ExtraFanart] 相似影片已缓存');
+
+			// 检查是否还在详情页（异步加载期间用户可能离开）
+			if (!this.isDetailsPage()) {
+				console.log('[ExtraFanart] 加载完成后检查：已离开详情页，数据已缓存但取消显示');
+				return;
+			}
+
+			// 最终检查：确保 itemId 没有变化（用户可能快速切换页面）
+			if (this.itemId !== loadedItemId) {
+				console.log('[ExtraFanart] itemId已变化，取消显示相似影片', { loaded: loadedItemId, current: this.itemId });
+				return;
+			}
+
+			this.displaySimilarItems(shuffled);
+		} catch (error) {
+			console.error('[ExtraFanart] 加载相似影片失败:', error);
 		}
-		
-		// 最终检查：确保 itemId 没有变化（用户可能快速切换页面）
-		if (this.itemId !== loadedItemId) {
-			console.log('[ExtraFanart] itemId已变化，取消显示相似影片', { loaded: loadedItemId, current: this.itemId });
-			return;
-		}
-		
-		this.displaySimilarItems(shuffled);
-	} catch (error) {
-		console.error('[ExtraFanart] 加载相似影片失败:', error);
-	}
-}	static restoreCachedImages(itemId) {
+	} static restoreCachedImages(itemId) {
 		const cachedData = this.cachedImages.get(itemId);
 		if (!cachedData) {
 			console.log('[ExtraFanart] 没有找到缓存的剧照数据');
 			return;
 		}
-		
-	console.log('[ExtraFanart] 恢复缓存的剧照数据');
-	
-	// 检查是否是同一个 itemId（避免显示错误的内容）
-	const isSameItem = this.itemId === itemId;
-	console.log('[ExtraFanart] itemId 检查:', { currentItemId: this.itemId, targetItemId: itemId, isSameItem });
-	
-	// 恢复数据
-	this.endImageIndex = cachedData.endImageIndex;
-	this.trailerUrl = cachedData.trailerUrl;
-	this.imageTagMap = new Map(cachedData.imageTagMap);
-	this.itemId = itemId;
-	
-	// 检查剧照容器是否已经存在且有内容
-	const gridContainer = this.imageContainer.querySelector('.jv-images-grid');
-	const hasContent = gridContainer && gridContainer.children.length > 0;
-	const isVisible = this.imageContainer.style.display === 'block' || this.imageContainer.style.display === '';
-	// 检查容器是否真正在详情页的DOM中
-	const detailPage = document.querySelector('#itemDetailPage:not(.hide), .itemView:not(.hide)');
-	const inDOM = detailPage && detailPage.contains(this.imageContainer);
-	
-	console.log('[ExtraFanart] 剧照容器状态:', { hasContent, isVisible, inDOM, childCount: gridContainer?.children.length });
-	
-	// 只有在是同一个项目且容器正确显示时才跳过渲染
-	if (isSameItem && hasContent && isVisible && inDOM) {
-		console.log('[ExtraFanart] 剧照容器已存在且有内容，跳过重新渲染');
-		return;
-	}
-	
-	console.log('[ExtraFanart] 需要重新显示容器到详情页');		console.log('[ExtraFanart] 重新构建剧照容器');
-		
+
+		console.log('[ExtraFanart] 恢复缓存的剧照数据');
+
+		// 检查是否是同一个 itemId（避免显示错误的内容）
+		const isSameItem = this.itemId === itemId;
+		console.log('[ExtraFanart] itemId 检查:', { currentItemId: this.itemId, targetItemId: itemId, isSameItem });
+
+		// 恢复数据
+		this.endImageIndex = cachedData.endImageIndex;
+		this.trailerUrl = cachedData.trailerUrl;
+		this.imageTagMap = new Map(cachedData.imageTagMap);
+		this.itemId = itemId;
+
+		// 检查剧照容器是否已经存在且有内容
+		const gridContainer = this.imageContainer.querySelector('.jv-images-grid');
+		const hasContent = gridContainer && gridContainer.children.length > 0;
+		const isVisible = this.imageContainer.style.display === 'block' || this.imageContainer.style.display === '';
+		// 检查容器是否真正在详情页的DOM中
+		const detailPage = document.querySelector('#itemDetailPage:not(.hide), .itemView:not(.hide)');
+		const inDOM = detailPage && detailPage.contains(this.imageContainer);
+
+		console.log('[ExtraFanart] 剧照容器状态:', { hasContent, isVisible, inDOM, childCount: gridContainer?.children.length });
+
+		// 只有在是同一个项目且容器正确显示时才跳过渲染
+		if (isSameItem && hasContent && isVisible && inDOM) {
+			console.log('[ExtraFanart] 剧照容器已存在且有内容，跳过重新渲染');
+			return;
+		}
+
+		console.log('[ExtraFanart] 需要重新显示容器到详情页'); console.log('[ExtraFanart] 重新构建剧照容器');
+
 		// 清空并重建
 		this.imageMap.clear();
 		if (gridContainer) {
 			gridContainer.innerHTML = '';
 		}
-		
+
 		// 使用 DocumentFragment 避免多次重排
 		const imageFragment = document.createDocumentFragment();
-		
+
 		// 如果有预告片，先添加预告片
 		if (this.trailerUrl) {
 			const trailerElement = this.createTrailerElement();
 			imageFragment.appendChild(trailerElement);
 		}
-		
+
 		for (let index = this.startImageIndex; index <= this.endImageIndex; index++) {
 			const imageElement = this.createImageElement(index);
 			imageFragment.appendChild(imageElement);
 			this.imageMap.set(index, imageElement);
 		}
-		
+
 		if (gridContainer) {
 			gridContainer.appendChild(imageFragment);
 		}
-		
+
 		// 更新图片数量显示
 		const countElement = this.imageContainer.querySelector('.jv-image-count');
 		if (countElement) {
@@ -1682,10 +1682,10 @@ static isDetailsPage() {
 			const totalText = this.trailerUrl ? `预告片 + ${totalImages} 张` : `共 ${totalImages} 张`;
 			countElement.textContent = totalText;
 		}
-		
+
 		// 显示容器（会自动重试）
 		this.showContainer(this.endImageIndex);
-		
+
 		console.log('[ExtraFanart] 剧照容器恢复完成');
 	}
 
@@ -1695,42 +1695,42 @@ static isDetailsPage() {
 			console.log('[ExtraFanart] itemId不匹配，取消显示缓存的相似影片', { cached: itemId, current: this.itemId });
 			return;
 		}
-		
+
 		const cachedItems = this.cachedSimilarItems.get(itemId);
 		if (!cachedItems) {
 			console.log('[ExtraFanart] 没有找到缓存的相似影片');
 			return;
 		}
-		
+
 		// 立即隐藏容器，防止显示旧内容
 		if (this.similarContainer) {
 			this.similarContainer.style.display = 'none';
 			this.similarContainer.removeAttribute('data-item-id');
 		}
-		
+
 		console.log('[ExtraFanart] 显示相似影片容器（缓存）');
 		this.displaySimilarItems(cachedItems);
 	}
 
 	static displaySimilarItems(items) {
 		if (!items || items.length === 0) return;
-		
+
 		// 检查是否还在详情页
 		if (!this.isDetailsPage()) {
 			console.log('[ExtraFanart] 已离开详情页，取消显示相似影片');
 			return;
 		}
-		
+
 		const gridContainer = this.similarContainer.querySelector('.jv-similar-grid');
 		if (!gridContainer) return;
-		
+
 		// 立即隐藏容器，防止显示旧内容
 		this.similarContainer.style.display = 'none';
-		
+
 		// 早期检查：如果容器已显示且itemId匹配，且有内容，则跳过
 		const containerItemId = this.similarContainer.getAttribute('data-item-id');
-		if (containerItemId === this.itemId && 
-		    gridContainer.children.length > 0) {
+		if (containerItemId === this.itemId &&
+			gridContainer.children.length > 0) {
 			const detailPage = document.querySelector('#itemDetailPage:not(.hide), .itemView:not(.hide)');
 			if (detailPage && detailPage.contains(this.similarContainer)) {
 				console.log('[ExtraFanart] 相似影片容器已正确显示，跳过');
@@ -1738,11 +1738,11 @@ static isDetailsPage() {
 				return;
 			}
 		}
-		
+
 		// 强制清空，确保显示新内容
 		gridContainer.innerHTML = '';
 		console.log('[ExtraFanart] 清空相似影片容器，准备添加', items.length, '个影片');
-		
+
 		// 使用 DocumentFragment 批量添加内容，避免多次重排
 		const fragment = document.createDocumentFragment();
 		items.forEach(item => {
@@ -1750,33 +1750,33 @@ static isDetailsPage() {
 			fragment.appendChild(card);
 		});
 		gridContainer.appendChild(fragment);
-		
+
 		// 更新影片数量显示
 		const countElement = this.similarContainer.querySelector('.jv-similar-count');
 		if (countElement) {
 			countElement.textContent = `共 ${items.length} 部`;
 		}
-		
+
 		// 确保容器在正确的详情页DOM中
 		const detailPage = document.querySelector('#itemDetailPage:not(.hide), .itemView:not(.hide)');
 		const isInCorrectPage = detailPage && detailPage.contains(this.similarContainer);
-		
+
 		console.log('[ExtraFanart] 相似影片容器DOM检查:', {
 			detailPageExists: !!detailPage,
 			containerInDOM: document.body.contains(this.similarContainer),
 			containerInCorrectPage: isInCorrectPage
 		});
-		
+
 		// 如果容器不在正确的详情页中，需要重新插入
 		if (!isInCorrectPage && this.similarContainer.parentNode) {
 			console.log('[ExtraFanart] 容器在错误位置，移除后重新插入');
 			this.similarContainer.parentNode.removeChild(this.similarContainer);
 		}
-		
+
 		// 使用 MutationObserver 等待剧照容器或插入位置出现
 		const imageContainer = detailPage ? detailPage.querySelector('#jv-image-container') : null;
 		const actorContainer = detailPage ? detailPage.querySelector('#jv-actor-container') : null;
-		
+
 		if (imageContainer && document.body.contains(imageContainer)) {
 			// 如果有剧照容器，直接使用
 			this.insertSimilarContainerAfterImageOrActor(imageContainer, actorContainer, detailPage);
@@ -1802,18 +1802,18 @@ static isDetailsPage() {
 
 	static insertSimilarContainerAfterImageOrActor(imageContainer, actorContainer, detailPage) {
 		// 最终检查：确保 itemId 没有变化
-		if (this.similarContainer.getAttribute('data-item-id') && 
+		if (this.similarContainer.getAttribute('data-item-id') &&
 			this.similarContainer.getAttribute('data-item-id') !== this.itemId) {
 			console.log('[ExtraFanart] itemId已变化，取消显示相似影片');
 			return;
 		}
-		
+
 		// 检查是否还在详情页
 		if (!this.isDetailsPage()) {
 			console.log('[ExtraFanart] 已离开详情页，取消显示相似影片');
 			return;
 		}
-		
+
 		// 插入逻辑：如果演员作品已存在（先加载完成），插入到最后一个演员容器后面；否则插到剧照后面
 		if (imageContainer && document.body.contains(imageContainer)) {
 			// 如果有剧照容器
@@ -1830,7 +1830,7 @@ static isDetailsPage() {
 						break;
 					}
 				}
-				
+
 				// 插入到最后一个演员容器后面
 				if (!document.body.contains(this.similarContainer)) {
 					lastActorContainer.insertAdjacentElement('afterend', this.similarContainer);
@@ -1850,13 +1850,13 @@ static isDetailsPage() {
 				}
 			}
 		}
-		
+
 		// 内容加载完成，显示容器
 		this.similarContainer.style.display = 'block';
 		// 标记容器属于哪个 itemId
 		this.similarContainer.setAttribute('data-item-id', this.itemId);
 		console.log('[ExtraFanart] 相似影片容器已显示, itemId:', this.itemId);
-		
+
 		// 添加刷新功能
 		const titleElement = this.similarContainer.querySelector('.jv-similar-title');
 		if (titleElement) {
@@ -1864,10 +1864,10 @@ static isDetailsPage() {
 			titleElement.title = '点击刷新';
 			titleElement.onclick = () => this.loadSimilarItems();
 		}
-		
+
 		// 添加横向滚动功能
 		this.setupScrollButtons();
-		
+
 		// 立即添加悬停预告片功能，无需延迟
 		this.addHoverTrailerEffect();
 	}
@@ -1877,7 +1877,7 @@ static isDetailsPage() {
 		card.className = 'jv-similar-card';
 		card.dataset.itemId = item.Id;
 		card.dataset.localTrailerCount = item.LocalTrailerCount || 0;
-		
+
 		// 优先使用横版封面
 		let imgUrl = '';
 		if (item.ImageTags && item.ImageTags.Thumb) {
@@ -1895,16 +1895,16 @@ static isDetailsPage() {
 				maxWidth: 220
 			});
 		}
-		
+
 		const year = item.ProductionYear || '';
 		const name = item.Name || '';
 		const runTime = this.formatRunTime(item.RunTimeTicks);
 		const rating = item.CommunityRating ? item.CommunityRating.toFixed(1) : '';
 		const code = this.extractCodeFromTitle(name);
-		
+
 		// 使用 RemoteTrailers 判断是否有预告片
 		const hasTrailer = (item.RemoteTrailers && item.RemoteTrailers.length > 0) || (item.LocalTrailerCount || 0) > 0;
-		
+
 		// 构建元数据字符串：年份 | 时长 | ⭐️评分
 		let metadataStr = year;
 		if (runTime) {
@@ -1913,10 +1913,10 @@ static isDetailsPage() {
 		if (rating) {
 			metadataStr = metadataStr ? `${metadataStr} · ★ ${rating}` : `★ ${rating}`;
 		}
-		
+
 		// 构建短评按钮的 HTML（仅当能够提取到番号时）
 		const reviewBtnHtml = code ? `<button class="jv-card-review-btn" data-code="${code}" title="查看 JavDB 短评">短评</button>` : '';
-		
+
 		card.innerHTML = `
 			<div class="jv-similar-card-image ${hasTrailer ? 'has-trailer' : ''}">
 				<img src="${imgUrl}" alt="${name}" loading="lazy" decoding="async" />
@@ -1930,7 +1930,7 @@ static isDetailsPage() {
 				</div>
 			</div>
 		`;
-		
+
 		// 为短评按钮绑定点击事件
 		if (code) {
 			const reviewBtn = card.querySelector('.jv-card-review-btn');
@@ -1942,7 +1942,7 @@ static isDetailsPage() {
 				};
 			}
 		}
-		
+
 		// 根据图片宽高比动态调整显示方式
 		const img = card.querySelector('img');
 		if (img) {
@@ -1958,7 +1958,7 @@ static isDetailsPage() {
 					}
 				}
 			};
-			
+
 			// 图片加载完成时调整
 			if (img.complete) {
 				adjustImageFit();
@@ -1966,7 +1966,7 @@ static isDetailsPage() {
 				img.addEventListener('load', adjustImageFit);
 			}
 		}
-		
+
 		return card;
 	}
 
@@ -1975,27 +1975,27 @@ static isDetailsPage() {
 		const grid = this.similarContainer.querySelector('.jv-similar-grid');
 		const leftBtn = this.similarContainer.querySelector('.jv-scroll-left');
 		const rightBtn = this.similarContainer.querySelector('.jv-scroll-right');
-		
+
 		if (!scrollContainer || !grid || !leftBtn || !rightBtn) return;
-		
+
 		// 计算每次应该滚动的距离（一页显示的宽度）
 		const calculateScrollAmount = () => {
 			const cards = grid.querySelectorAll('.jv-similar-card');
 			if (cards.length === 0) return 400;
-			
+
 			const firstCard = cards[0];
 			const cardStyle = window.getComputedStyle(firstCard);
 			const cardWidth = firstCard.offsetWidth;
 			const marginRight = parseFloat(cardStyle.marginRight) || 0;
 			const cardWithMargin = cardWidth + marginRight;
-			
+
 			// 计算当前容器宽度内能显示几张卡片
 			const visibleCards = Math.floor(grid.clientWidth / cardWithMargin);
 			const scrollAmount = visibleCards * cardWithMargin;
-			
+
 			return Math.max(scrollAmount, cardWithMargin);
 		};
-		
+
 		// 使用 requestAnimationFrame 节流滚动监听回调
 		let updateRAFId = null;
 		const updateButtonsRAF = () => {
@@ -2005,25 +2005,25 @@ static isDetailsPage() {
 			updateRAFId = requestAnimationFrame(() => {
 				const scrollLeft = grid.scrollLeft;
 				const maxScroll = grid.scrollWidth - grid.clientWidth;
-				
+
 				leftBtn.style.display = scrollLeft > 0 ? 'flex' : 'none';
 				rightBtn.style.display = scrollLeft < maxScroll - 10 ? 'flex' : 'none';
 				updateRAFId = null;
 			});
 		};
-		
+
 		leftBtn.onclick = () => {
 			const scrollAmount = calculateScrollAmount();
 			grid.scrollBy({ left: -scrollAmount, behavior: 'smooth' });
 			setTimeout(updateButtonsRAF, 50);
 		};
-		
+
 		rightBtn.onclick = () => {
 			const scrollAmount = calculateScrollAmount();
 			grid.scrollBy({ left: scrollAmount, behavior: 'smooth' });
 			setTimeout(updateButtonsRAF, 50);
 		};
-		
+
 		// 使用 passive 监听器并结合 requestAnimationFrame 来避免性能问题
 		grid.addEventListener('scroll', updateButtonsRAF, { passive: true });
 		updateButtonsRAF(); // 初始状态
@@ -2033,29 +2033,29 @@ static isDetailsPage() {
 		// 如果是触摸设备，不添加悬停效果
 		if ('ontouchstart' in window) return;
 		if (!this.similarContainer) return;
-		
+
 		const cards = this.similarContainer.querySelectorAll('.jv-similar-card');
-		
+
 		cards.forEach((card, index) => {
 			const imageContainer = card.querySelector('.jv-similar-card-image');
 			const hasTrailer = imageContainer && imageContainer.classList.contains('has-trailer');
-			
+
 			if (!imageContainer || !hasTrailer) return;
-			
+
 			const img = imageContainer.querySelector('img');
 			const overlay = imageContainer.querySelector('.jv-card-overlay');
 			const itemId = card.dataset.itemId;
-			
+
 			let isHovered = false;
 			let videoElement = null;
 			let expandBtn = null;
 			let currentTrailerUrl = null;
 			let debounceTimer = null; // 防抖定时器
-			
+
 			const onMouseEnter = () => {
 				isHovered = true;
 				img.style.filter = 'blur(5px)';
-				
+
 				// 使用防抖，延迟 400ms 再加载预告片
 				clearTimeout(debounceTimer);
 				debounceTimer = setTimeout(() => {
@@ -2064,19 +2064,19 @@ static isDetailsPage() {
 						console.log('[ExtraFanart] 防抖期间鼠标离开，取消加载预告片');
 						return;
 					}
-					
+
 					// 异步加载预告片
 					ExtraFanart.getTrailerUrlForHover(itemId).then(trailerUrl => {
 						if (!isHovered || !trailerUrl) {
 							console.log('[ExtraFanart] 预告片加载期间状态变化或无预告片');
 							return;
 						}
-						
+
 						currentTrailerUrl = trailerUrl;
-						
+
 						// 检查是否是 YouTube 链接
 						const isYouTube = ExtraFanart.isYouTubeUrl(trailerUrl);
-						
+
 						// 创建放大按钮
 						expandBtn = document.createElement('button');
 						expandBtn.className = 'jv-expand-btn';
@@ -2104,36 +2104,36 @@ static isDetailsPage() {
 							backdrop-filter: blur(4px);
 						`;
 						expandBtn.title = '全屏播放';
-						
+
 						expandBtn.onmouseenter = () => {
 							expandBtn.style.background = 'rgba(0, 0, 0, 0.8)';
 							expandBtn.style.transform = 'scale(1.1)';
 						};
-						
+
 						expandBtn.onmouseleave = () => {
 							expandBtn.style.background = 'rgba(0, 0, 0, 0.6)';
 							expandBtn.style.transform = 'scale(1)';
 						};
-						
+
 						expandBtn.onclick = (e) => {
 							e.stopPropagation();
 							console.log('[ExtraFanart] 放大按钮被点击（相似影片）', { trailerUrl: currentTrailerUrl, isYouTube });
 							// 打开全屏播放器
 							ExtraFanart.openVideoPlayer(currentTrailerUrl, isYouTube);
 						};
-						
+
 						// 将按钮添加到 imageContainer 而不是 overlay，避免层级问题
 						imageContainer.appendChild(expandBtn);
-						
+
 						// 延迟显示按钮
 						if (isHovered && expandBtn) {
 							expandBtn.style.opacity = '1';
 						}
-						
+
 						if (isYouTube) {
 							// 使用 iframe 播放 YouTube 视频
 							const embedUrl = ExtraFanart.convertYouTubeUrl(trailerUrl);
-							
+
 							if (embedUrl) {
 								videoElement = document.createElement('iframe');
 								videoElement.src = embedUrl;
@@ -2153,7 +2153,7 @@ static isDetailsPage() {
 									pointer-events: auto;
 								`;
 								overlay.appendChild(videoElement);
-								
+
 								if (isHovered) {
 									setTimeout(() => {
 										if (videoElement) {
@@ -2187,10 +2187,10 @@ static isDetailsPage() {
 								transition: opacity 0.3s ease;
 								z-index: 2;
 							`;
-							
+
 							// 监听音量变化，只在用户主动操作时记录
 							let userInteracted = false;
-							videoElement.addEventListener('volumechange', function() {
+							videoElement.addEventListener('volumechange', function () {
 								if (userInteracted) {
 									if (!this.muted && this.volume > 0) {
 										localStorage.setItem('jv-trailer-volume', this.volume);
@@ -2200,11 +2200,11 @@ static isDetailsPage() {
 									}
 								}
 							});
-							
+
 							// 标记用户交互
-							videoElement.addEventListener('click', function() { userInteracted = true; });
-							videoElement.addEventListener('mousedown', function() { userInteracted = true; });
-							
+							videoElement.addEventListener('click', function () { userInteracted = true; });
+							videoElement.addEventListener('mousedown', function () { userInteracted = true; });
+
 							// 延迟恢复用户设置，避免初始化时触发
 							setTimeout(() => {
 								if (videoElement) {
@@ -2217,9 +2217,9 @@ static isDetailsPage() {
 									userInteracted = true; // 设置完成后允许记录变化
 								}
 							}, 100);
-							
+
 							overlay.appendChild(videoElement);
-							
+
 							if (isHovered) {
 								setTimeout(() => {
 									if (videoElement) {
@@ -2231,28 +2231,28 @@ static isDetailsPage() {
 					});
 				}, 400); // 防抖延迟 400ms
 			};
-			
+
 			const onMouseLeave = () => {
 				isHovered = false;
-				
+
 				// 取消待处理的防抖操作
 				clearTimeout(debounceTimer);
-				
+
 				img.style.filter = '';
-				
+
 				if (videoElement) {
 					videoElement.remove();
 					videoElement = null;
 				}
-				
+
 				if (expandBtn && expandBtn.parentNode) {
 					expandBtn.parentNode.removeChild(expandBtn);
 					expandBtn = null;
 				}
-				
+
 				currentTrailerUrl = null;
 			};
-			
+
 			card.addEventListener('mouseenter', onMouseEnter);
 			card.addEventListener('mouseleave', onMouseLeave);
 		});
@@ -2261,26 +2261,26 @@ static isDetailsPage() {
 	static async getTrailerUrlForHover(itemId) {
 		const cacheKey = `trailerUrl_${itemId}`;
 		let videoUrl = localStorage.getItem(cacheKey);
-		
+
 		if (videoUrl) return videoUrl;
 		if (typeof ApiClient === 'undefined') return null;
-		
+
 		try {
 			const item = await ApiClient.getItem(ApiClient.getCurrentUserId(), itemId);
-			
+
 			// 优先使用 RemoteTrailers（远程预告片）
 			if (item.RemoteTrailers && item.RemoteTrailers.length > 0) {
 				videoUrl = item.RemoteTrailers[0].Url;
 				localStorage.setItem(cacheKey, videoUrl);
 				return videoUrl;
 			}
-			
+
 			// 降级方案：使用本地预告片
 			const localTrailers = await ApiClient.getLocalTrailers(ApiClient.getCurrentUserId(), itemId);
-			
+
 			if (localTrailers && localTrailers.length > 0) {
 				const trailerItem = await ApiClient.getItem(ApiClient.getCurrentUserId(), localTrailers[0].Id);
-				
+
 				// 获取流URL
 				const mediaSource = trailerItem.MediaSources && trailerItem.MediaSources[0];
 				if (mediaSource) {
@@ -2291,24 +2291,24 @@ static isDetailsPage() {
 		} catch (err) {
 			console.error('[ExtraFanart] 获取悬停预告片URL失败:', err);
 		}
-		
+
 		return videoUrl;
 	}
 
 	// 番号提取和复制功能
 	static async extractAndDisplayCode() {
 		if (!this.itemId || typeof ApiClient === 'undefined') return;
-		
+
 		// 检查是否还在详情页
 		if (!this.isDetailsPage()) {
 			console.log('[ExtraFanart] 已离开详情页，取消提取番号');
 			return;
 		}
-		
+
 		try {
 			const item = await this.getItemDetails(this.itemId);
 			if (!item || item.Type !== 'Movie') return;
-			
+
 			// 查找标题元素 - 优化选择器查询顺序，最常用的放前面
 			const titleSelectors = [
 				'.detailPagePrimaryContainer h1',
@@ -2334,7 +2334,7 @@ static isDetailsPage() {
 				'h1[is="emby-title"]',
 				'[is="emby-title"]'
 			];
-			
+
 			let titleElement = null;
 			for (const selector of titleSelectors) {
 				const el = document.querySelector(selector);
@@ -2347,62 +2347,62 @@ static isDetailsPage() {
 					break;
 				}
 			}
-			
-		if (!titleElement) return;
-		
-		const titleText = titleElement.textContent.trim();
-		
-		// 提取番号的逻辑
-		let code = null;
-		let codeStartIndex = -1;
-		let codeEndIndex = -1;
-		let usesBrackets = true; // 标记是否使用方括号格式
-		
-		// 方式1：从方括号内提取番号：[ABC-123]
-		const bracketMatch = titleText.match(/\[([^\]]+)\]/);
-		if (bracketMatch && bracketMatch[1]) {
-			code = bracketMatch[1];
-			codeStartIndex = titleText.indexOf('[');
-			codeEndIndex = titleText.indexOf(']') + 1;
-			console.log('[ExtraFanart] 从方括号内提取到番号:', code);
-		} else {
-			// 方式2：回退方案 - 提取第一个空格之前的内容作为番号
-			const spaceIndex = titleText.indexOf(' ');
-			if (spaceIndex > 0) {
-				code = titleText.slice(0, spaceIndex).trim();
-				codeStartIndex = 0;
-				codeEndIndex = spaceIndex;
-				usesBrackets = false;
-				console.log('[ExtraFanart] 从第一个空格前提取到番号:', code);
+
+			if (!titleElement) return;
+
+			const titleText = titleElement.textContent.trim();
+
+			// 提取番号的逻辑
+			let code = null;
+			let codeStartIndex = -1;
+			let codeEndIndex = -1;
+			let usesBrackets = true; // 标记是否使用方括号格式
+
+			// 方式1：从方括号内提取番号：[ABC-123]
+			const bracketMatch = titleText.match(/\[([^\]]+)\]/);
+			if (bracketMatch && bracketMatch[1]) {
+				code = bracketMatch[1];
+				codeStartIndex = titleText.indexOf('[');
+				codeEndIndex = titleText.indexOf(']') + 1;
+				console.log('[ExtraFanart] 从方括号内提取到番号:', code);
 			} else {
-				// 如果没有空格，也没有方括号，说明无法提取番号
-				console.log('[ExtraFanart] 无法提取番号，标题格式不符合要求');
-				return;
+				// 方式2：回退方案 - 提取第一个空格之前的内容作为番号
+				const spaceIndex = titleText.indexOf(' ');
+				if (spaceIndex > 0) {
+					code = titleText.slice(0, spaceIndex).trim();
+					codeStartIndex = 0;
+					codeEndIndex = spaceIndex;
+					usesBrackets = false;
+					console.log('[ExtraFanart] 从第一个空格前提取到番号:', code);
+				} else {
+					// 如果没有空格，也没有方括号，说明无法提取番号
+					console.log('[ExtraFanart] 无法提取番号，标题格式不符合要求');
+					return;
+				}
 			}
-		}
-		
-		if (!code) return;			// 生成网络链接（仅在启用时）
+
+			if (!code) return;			// 生成网络链接（仅在启用时）
 			let webLinks = [];
 			if (this.enableWebLinks) {
 				webLinks = this.createWebLinks(code, item);
 			}
-			
-		// 再次检查是否还在详情页（异步加载期间用户可能离开）
-		if (!this.isDetailsPage()) {
-			console.log('[ExtraFanart] 加载完成后检查：已离开详情页，取消显示番号');
-			return;
-		}
-		
-		// 缓存提取的番号信息和网络链接
-		this.cachedCodes.set(this.itemId, {
-			code: code,
-			titleText: titleText,
-			codeStartIndex: codeStartIndex,
-			codeEndIndex: codeEndIndex,
-			webLinks: webLinks,
-			usesBrackets: usesBrackets
-		});
-		console.log('[ExtraFanart] 番号已缓存:', code, '(方括号格式:', usesBrackets + ')');			// 创建可复制的链接元素
+
+			// 再次检查是否还在详情页（异步加载期间用户可能离开）
+			if (!this.isDetailsPage()) {
+				console.log('[ExtraFanart] 加载完成后检查：已离开详情页，取消显示番号');
+				return;
+			}
+
+			// 缓存提取的番号信息和网络链接
+			this.cachedCodes.set(this.itemId, {
+				code: code,
+				titleText: titleText,
+				codeStartIndex: codeStartIndex,
+				codeEndIndex: codeEndIndex,
+				webLinks: webLinks,
+				usesBrackets: usesBrackets
+			});
+			console.log('[ExtraFanart] 番号已缓存:', code, '(方括号格式:', usesBrackets + ')');			// 创建可复制的链接元素
 			const copyLink = document.createElement('a');
 			copyLink.textContent = code;
 			copyLink.className = 'jv-copy-code';
@@ -2411,52 +2411,52 @@ static isDetailsPage() {
 			copyLink.style.color = 'lightblue';
 			copyLink.style.textDecoration = 'none';
 			copyLink.style.transition = 'transform 0.1s ease';
-			
+
 			copyLink.onclick = (e) => {
 				e.preventDefault();
 				this.copyToClipboard(code);
 				this.showToast(`已复制: ${code}`);
 			};
-			
+
 			copyLink.onmousedown = () => {
 				copyLink.style.transform = 'scale(0.95)';
 			};
-			
+
 			copyLink.onmouseup = () => {
 				copyLink.style.transform = 'scale(1)';
 			};
-			
-		// 替换标题：根据提取方式选择格式
-		const beforeCode = titleText.slice(0, codeStartIndex);
-		const afterCode = titleText.slice(codeEndIndex);
-		
-		titleElement.innerHTML = '';
-		if (beforeCode) {
-			titleElement.appendChild(document.createTextNode(beforeCode));
-		}
-		
-		if (usesBrackets) {
-			// 保留方括号结构
-			titleElement.appendChild(document.createTextNode('['));
-			titleElement.appendChild(copyLink);
-			titleElement.appendChild(document.createTextNode(']'));
-		} else {
-			// 不使用方括号，直接显示番号
-			titleElement.appendChild(copyLink);
-		}
-		
-		if (afterCode) {
-			titleElement.appendChild(document.createTextNode(afterCode));
-		}			// 插入网络链接到标题下方（仅在启用且有链接时）
+
+			// 替换标题：根据提取方式选择格式
+			const beforeCode = titleText.slice(0, codeStartIndex);
+			const afterCode = titleText.slice(codeEndIndex);
+
+			titleElement.innerHTML = '';
+			if (beforeCode) {
+				titleElement.appendChild(document.createTextNode(beforeCode));
+			}
+
+			if (usesBrackets) {
+				// 保留方括号结构
+				titleElement.appendChild(document.createTextNode('['));
+				titleElement.appendChild(copyLink);
+				titleElement.appendChild(document.createTextNode(']'));
+			} else {
+				// 不使用方括号，直接显示番号
+				titleElement.appendChild(copyLink);
+			}
+
+			if (afterCode) {
+				titleElement.appendChild(document.createTextNode(afterCode));
+			}			// 插入网络链接到标题下方（仅在启用且有链接时）
 			if (this.enableWebLinks && webLinks.length > 0) {
 				this.insertWebLinks(titleElement, webLinks);
 			}
-			
+
 		} catch (error) {
 			console.error('[ExtraFanart] 番号提取失败:', error);
 		}
 	}
-	
+
 	static displayCachedCode(itemId) {
 		console.log('[ExtraFanart] displayCachedCode 调用', { itemId, hasCache: this.cachedCodes.has(itemId) });
 		const cachedCodeInfo = this.cachedCodes.get(itemId);
@@ -2464,101 +2464,101 @@ static isDetailsPage() {
 			console.log('[ExtraFanart] 没有找到缓存的番号');
 			return;
 		}
-		
-	console.log('[ExtraFanart] 找到缓存的番号:', cachedCodeInfo.code);
-	
-	// 查找标题元素
-	const titleSelectors = [
-		'.detailPagePrimaryContainer h1',
-		'.itemView:not(.hide) .nameContainer .itemName',
-		'.detailPagePrimaryContainer .itemName',
-		'#itemDetailPage:not(.hide) .nameContainer .itemName',
-		'.nameContainer .itemName',
-		'.detailPageContent h1',
-		'.detailPagePrimaryTitle',
-		'.detailPageWatchContainer + div h1',
-		'.detailPageWatchContainer ~ div h1',
-		'.mainDetailButtons + div h1',
-		'div[data-role="page"]:not(.hide) h1',
-		'div[data-role="page"]:not(.hide) .itemName',
-		'.page:not(.hide) h1',
-		'.page:not(.hide) .itemName',
-		'h1',
-		'.itemName'
-	];
-	
-	let titleElement = null;
-	for (const selector of titleSelectors) {
-		const el = document.querySelector(selector);
-		if (el && el.textContent.trim()) {
-			titleElement = el;
-			break;
-		}
-	}
-	
-	if (!titleElement) {
-		console.log('[ExtraFanart] 未找到标题元素');
-		return;
-	}
-	
-	// 检查番号是否已经显示
-	// 1. 检查是否有我们添加的可点击番号元素
-	const existingCode = titleElement.querySelector('.jv-copy-code');
-	if (existingCode && existingCode.textContent === cachedCodeInfo.code) {
-		console.log('[ExtraFanart] 番号元素已显示在标题中，检查网络链接');
-		
-		// 只有在启用网络链接时才检查和添加
-		if (this.enableWebLinks && cachedCodeInfo.webLinks && cachedCodeInfo.webLinks.length > 0) {
-			// 检查网络链接是否已存在
-			const existingLinksContainer = titleElement.parentElement.querySelector('.jv-web-links-container');
-			if (existingLinksContainer) {
-				console.log('[ExtraFanart] 网络链接已存在，跳过重新渲染');
-				return;
-			} else {
-				console.log('[ExtraFanart] 番号存在但缺少网络链接，添加链接');
-				this.insertWebLinks(titleElement, cachedCodeInfo.webLinks);
+
+		console.log('[ExtraFanart] 找到缓存的番号:', cachedCodeInfo.code);
+
+		// 查找标题元素
+		const titleSelectors = [
+			'.detailPagePrimaryContainer h1',
+			'.itemView:not(.hide) .nameContainer .itemName',
+			'.detailPagePrimaryContainer .itemName',
+			'#itemDetailPage:not(.hide) .nameContainer .itemName',
+			'.nameContainer .itemName',
+			'.detailPageContent h1',
+			'.detailPagePrimaryTitle',
+			'.detailPageWatchContainer + div h1',
+			'.detailPageWatchContainer ~ div h1',
+			'.mainDetailButtons + div h1',
+			'div[data-role="page"]:not(.hide) h1',
+			'div[data-role="page"]:not(.hide) .itemName',
+			'.page:not(.hide) h1',
+			'.page:not(.hide) .itemName',
+			'h1',
+			'.itemName'
+		];
+
+		let titleElement = null;
+		for (const selector of titleSelectors) {
+			const el = document.querySelector(selector);
+			if (el && el.textContent.trim()) {
+				titleElement = el;
+				break;
 			}
 		}
-		return;
-	}
-	
-	// 2. 检查标题文本是否已经包含番号（可能是Emby恢复的原始标题）
-	const currentTitleText = titleElement.textContent;
-	
-	// 根据是否使用方括号构建不同的匹配模式
-	const hasBrackets = cachedCodeInfo.usesBrackets !== false; // 默认为true，兼容旧缓存
-	let codePattern;
-	if (hasBrackets) {
-		codePattern = new RegExp(`\\[${cachedCodeInfo.code.replace(/[-\/\\^$*+?.()|[\]{}]/g, '\\$&')}\\]`);
-	} else {
-		// 无方括号时，匹配番号后跟空格或结尾
-		codePattern = new RegExp(`^${cachedCodeInfo.code.replace(/[-\/\\^$*+?.()|[\]{}]/g, '\\$&')}(?:\\s|$)`);
-	}
-	
-	// 如果标题文本完全匹配缓存的标题文本，说明是原始状态，需要添加可点击元素
-	// 但为了避免频繁重绘，我们只在真正需要时才渲染
-	if (codePattern.test(currentTitleText) && currentTitleText === cachedCodeInfo.titleText) {
-		console.log('[ExtraFanart] 标题已恢复原始状态，添加可点击番号元素');
-		// 继续执行渲染，添加可点击元素
-	} else if (existingCode) {
-		// 有可点击元素但内容不匹配，需要更新
-		console.log('[ExtraFanart] 番号元素存在但内容不匹配，更新渲染');
-	} else if (!codePattern.test(currentTitleText)) {
-		// 标题中完全不包含番号
-		console.log('[ExtraFanart] 标题中不包含番号，跳过渲染');
-		return;
-	} else {
-		console.log('[ExtraFanart] 标题状态异常，跳过渲染', {
-			currentTitleText,
-			cachedTitleText: cachedCodeInfo.titleText
-		});
-		return;
-	}
-	
-	console.log('[ExtraFanart] 开始渲染番号');		if (!titleElement) return;
-		
+
+		if (!titleElement) {
+			console.log('[ExtraFanart] 未找到标题元素');
+			return;
+		}
+
+		// 检查番号是否已经显示
+		// 1. 检查是否有我们添加的可点击番号元素
+		const existingCode = titleElement.querySelector('.jv-copy-code');
+		if (existingCode && existingCode.textContent === cachedCodeInfo.code) {
+			console.log('[ExtraFanart] 番号元素已显示在标题中，检查网络链接');
+
+			// 只有在启用网络链接时才检查和添加
+			if (this.enableWebLinks && cachedCodeInfo.webLinks && cachedCodeInfo.webLinks.length > 0) {
+				// 检查网络链接是否已存在
+				const existingLinksContainer = titleElement.parentElement.querySelector('.jv-web-links-container');
+				if (existingLinksContainer) {
+					console.log('[ExtraFanart] 网络链接已存在，跳过重新渲染');
+					return;
+				} else {
+					console.log('[ExtraFanart] 番号存在但缺少网络链接，添加链接');
+					this.insertWebLinks(titleElement, cachedCodeInfo.webLinks);
+				}
+			}
+			return;
+		}
+
+		// 2. 检查标题文本是否已经包含番号（可能是Emby恢复的原始标题）
+		const currentTitleText = titleElement.textContent;
+
+		// 根据是否使用方括号构建不同的匹配模式
+		const hasBrackets = cachedCodeInfo.usesBrackets !== false; // 默认为true，兼容旧缓存
+		let codePattern;
+		if (hasBrackets) {
+			codePattern = new RegExp(`\\[${cachedCodeInfo.code.replace(/[-\/\\^$*+?.()|[\]{}]/g, '\\$&')}\\]`);
+		} else {
+			// 无方括号时，匹配番号后跟空格或结尾
+			codePattern = new RegExp(`^${cachedCodeInfo.code.replace(/[-\/\\^$*+?.()|[\]{}]/g, '\\$&')}(?:\\s|$)`);
+		}
+
+		// 如果标题文本完全匹配缓存的标题文本，说明是原始状态，需要添加可点击元素
+		// 但为了避免频繁重绘，我们只在真正需要时才渲染
+		if (codePattern.test(currentTitleText) && currentTitleText === cachedCodeInfo.titleText) {
+			console.log('[ExtraFanart] 标题已恢复原始状态，添加可点击番号元素');
+			// 继续执行渲染，添加可点击元素
+		} else if (existingCode) {
+			// 有可点击元素但内容不匹配，需要更新
+			console.log('[ExtraFanart] 番号元素存在但内容不匹配，更新渲染');
+		} else if (!codePattern.test(currentTitleText)) {
+			// 标题中完全不包含番号
+			console.log('[ExtraFanart] 标题中不包含番号，跳过渲染');
+			return;
+		} else {
+			console.log('[ExtraFanart] 标题状态异常，跳过渲染', {
+				currentTitleText,
+				cachedTitleText: cachedCodeInfo.titleText
+			});
+			return;
+		}
+
+		console.log('[ExtraFanart] 开始渲染番号'); if (!titleElement) return;
+
 		const { code, titleText, codeStartIndex, codeEndIndex, webLinks, usesBrackets } = cachedCodeInfo;
-		
+
 		// 创建可复制的链接元素
 		const copyLink = document.createElement('a');
 		copyLink.textContent = code;
@@ -2568,30 +2568,30 @@ static isDetailsPage() {
 		copyLink.style.color = 'lightblue';
 		copyLink.style.textDecoration = 'none';
 		copyLink.style.transition = 'transform 0.1s ease';
-		
+
 		copyLink.onclick = (e) => {
 			e.preventDefault();
 			this.copyToClipboard(code);
 			this.showToast(`已复制: ${code}`);
 		};
-		
+
 		copyLink.onmousedown = () => {
 			copyLink.style.transform = 'scale(0.95)';
 		};
-		
+
 		copyLink.onmouseup = () => {
 			copyLink.style.transform = 'scale(1)';
 		};
-		
+
 		// 替换标题：根据提取方式选择格式
 		const beforeCode = titleText.slice(0, codeStartIndex);
 		const afterCode = titleText.slice(codeEndIndex);
-		
+
 		titleElement.innerHTML = '';
 		if (beforeCode) {
 			titleElement.appendChild(document.createTextNode(beforeCode));
 		}
-		
+
 		if (usesBrackets !== false) {
 			// 保留方括号结构（默认行为，兼容旧缓存）
 			titleElement.appendChild(document.createTextNode('['));
@@ -2601,11 +2601,11 @@ static isDetailsPage() {
 			// 不使用方括号，直接显示番号
 			titleElement.appendChild(copyLink);
 		}
-		
+
 		if (afterCode) {
 			titleElement.appendChild(document.createTextNode(afterCode));
 		}
-		
+
 		// 插入网络链接（仅在启用且有链接时）
 		if (this.enableWebLinks && webLinks && webLinks.length > 0) {
 			this.insertWebLinks(titleElement, webLinks);
@@ -2617,11 +2617,11 @@ static isDetailsPage() {
 		const noNumCode = code.replace(/^\d+(?=[A-Za-z])/, '');
 		const baseCode = noNumCode.split('-')[0];
 		const webLinks = [];
-		
+
 		// 判断是否为无码或VR
 		const isUncensored = item.Genres && item.Genres.includes('无码');
 		const isVR = item.Genres && item.Genres.includes('VR');
-		
+
 		// 基础链接（所有影片都添加）
 		webLinks.push({
 			title: '搜索 javdb.com',
@@ -2629,21 +2629,30 @@ static isDetailsPage() {
 			color: 'pink',
 			site: 'javdb'
 		});
-		
+
 		webLinks.push({
 			title: '搜索 javbus.com',
 			url: `https://www.javbus.com/${code}`,
 			color: 'red',
 			site: 'javbus'
 		});
-		
+
 		webLinks.push({
-			title: '搜索 javlibrary.com',
-			url: `https://www.javlibrary.com/cn/vl_searchbyid.php?keyword=${code}`,
+			title: '搜索 supjav.com',
+			url: `https://supjav.com/zh/?s=${code}`,
 			color: 'rgb(191, 96, 166)',
-			site: 'javlibrary'
+			site: 'supjav'
 		});
-		
+
+		webLinks.push({
+			title: '搜索 98tang',
+			url: `https://www.sehuatang.net/search.php?mod=forum&srchtype=title&srhfid=&srhlocality=forum::index&srchtxt=${code}`,
+			color: 'rgb(191, 96, 166)',
+			site: '98tang'
+		});
+
+
+
 		// 根据类型添加特定链接
 		if (isUncensored) {
 			// 无码影片
@@ -2653,14 +2662,14 @@ static isDetailsPage() {
 				color: 'rgb(225, 125, 190)',
 				site: '7mmtv'
 			});
-			
+
 			webLinks.push({
 				title: '搜索 missav.ws',
 				url: `https://missav.ws/cn/search/${code}`,
 				color: 'rgb(238, 152, 215)',
 				site: 'missav'
 			});
-			
+
 			// 根据番号格式添加特定站点
 			if (/^n\d{4}$/i.test(code)) {
 				webLinks.push({
@@ -2710,7 +2719,7 @@ static isDetailsPage() {
 				color: 'red',
 				site: 'dmm'
 			});
-			
+
 			const jvrCode = (noNumCode.startsWith('DSVR') && /^\D+-\d{1,3}$/.test(code)) ? '3' + code : code;
 			webLinks.push({
 				title: '搜索 jvrlibrary.com',
@@ -2726,14 +2735,14 @@ static isDetailsPage() {
 				color: 'rgb(238, 152, 215)',
 				site: 'missav'
 			});
-			
+
 			webLinks.push({
 				title: '搜索 dmm.co.jp',
 				url: `https://www.dmm.co.jp/mono/-/search/=/searchstr=${code.toLowerCase()}/`,
 				color: 'red',
 				site: 'dmm'
 			});
-			
+
 			// 如果番号前有数字，可能是 MGS
 			if (noNumCode !== code) {
 				webLinks.push({
@@ -2744,7 +2753,7 @@ static isDetailsPage() {
 				});
 			}
 		}
-		
+
 		// 字幕网站
 		webLinks.push({
 			title: '搜索 subtitlecat.com',
@@ -2752,7 +2761,7 @@ static isDetailsPage() {
 			color: 'rgb(255, 191, 54)',
 			site: 'subtitlecat'
 		});
-		
+
 		// 如果 baseCode 不包含数字，添加 javdb 番号页
 		if (!/\d/.test(baseCode)) {
 			webLinks.push({
@@ -2762,16 +2771,16 @@ static isDetailsPage() {
 				site: baseCode
 			});
 		}
-		
+
 		return webLinks;
 	}
-	
+
 	// 辅助函数：转换为 DMM 格式的番号
 	static convertToDMMCode(code) {
 		code = code.toLowerCase();
 		const regex = /-(\d+)/;
 		const match = code.match(regex);
-		
+
 		if (match) {
 			const digits = match[1];
 			if (digits.length === 4) {
@@ -2780,19 +2789,19 @@ static isDetailsPage() {
 				return code.replace(regex, `00${digits}`);
 			}
 		}
-		
+
 		return code;
 	}
-	
+
 	// 插入网络链接到页面
 	static insertWebLinks(titleElement, webLinks) {
 		if (!webLinks || webLinks.length === 0) return;
 		if (!this.enableWebLinks) return; // 如果未启用，直接返回
-		
+
 		// 在整个详情页范围内查找链接容器，避免重复创建
 		const detailPage = document.querySelector('#itemDetailPage:not(.hide), .itemView:not(.hide)');
 		let linksContainer = detailPage ? detailPage.querySelector('.jv-web-links-container') : null;
-		
+
 		if (linksContainer) {
 			// 如果容器已存在，检查内容是否已经正确
 			const existingLinks = linksContainer.querySelectorAll('.jv-web-link');
@@ -2808,7 +2817,7 @@ static isDetailsPage() {
 			console.log('[ExtraFanart] 创建新的网络链接容器');
 			linksContainer = document.createElement('div');
 			linksContainer.className = 'jv-web-links-container';
-			
+
 			// 找到合适的插入位置（标题元素的父元素之后）
 			const titleParent = titleElement.parentElement;
 			if (titleParent && titleParent.nextElementSibling) {
@@ -2819,7 +2828,7 @@ static isDetailsPage() {
 				titleElement.insertAdjacentElement('afterend', linksContainer);
 			}
 		}
-		
+
 		// 创建链接元素
 		webLinks.forEach((linkInfo) => {
 			const link = document.createElement('a');
@@ -2831,36 +2840,36 @@ static isDetailsPage() {
 			link.title = linkInfo.title;
 			link.style.color = linkInfo.color;
 			link.style.borderColor = linkInfo.color;
-			
+
 			linksContainer.appendChild(link);
 		});
-		
+
 		// 添加 JavDB 短评按钮（仅在启用时显示）
 		if (this.enableJavdbReviews) {
 			this.addJavdbReviewButton(linksContainer);
 		}
 	}
-	
+
 	// ===== JavDB 短评功能 =====
-	
+
 	// 简单的加密方法（Base64 + 字符偏移混淆）
 	static encryptCredentials(username, password) {
 		const data = JSON.stringify({ u: username, p: password, t: Date.now() });
 		// 字符偏移混淆
-		const shifted = data.split('').map((c, i) => 
+		const shifted = data.split('').map((c, i) =>
 			String.fromCharCode(c.charCodeAt(0) + (i % 7) + 3)
 		).join('');
 		// Base64 编码
 		return btoa(encodeURIComponent(shifted));
 	}
-	
+
 	// 解密方法
 	static decryptCredentials(encrypted) {
 		try {
 			// Base64 解码
 			const shifted = decodeURIComponent(atob(encrypted));
 			// 字符偏移还原
-			const data = shifted.split('').map((c, i) => 
+			const data = shifted.split('').map((c, i) =>
 				String.fromCharCode(c.charCodeAt(0) - (i % 7) - 3)
 			).join('');
 			const parsed = JSON.parse(data);
@@ -2870,21 +2879,21 @@ static isDetailsPage() {
 			return null;
 		}
 	}
-	
+
 	// 保存加密凭据
 	static saveCredentials(username, password) {
 		const encrypted = this.encryptCredentials(username, password);
 		localStorage.setItem(this.JAVDB_CREDENTIALS_KEY, encrypted);
 		console.log('[ExtraFanart] JavDB 凭据已加密保存');
 	}
-	
+
 	// 获取已保存的凭据
 	static getCredentials() {
 		const encrypted = localStorage.getItem(this.JAVDB_CREDENTIALS_KEY);
 		if (!encrypted) return null;
 		return this.decryptCredentials(encrypted);
 	}
-	
+
 	// 清除凭据
 	static clearCredentials() {
 		localStorage.removeItem(this.JAVDB_CREDENTIALS_KEY);
@@ -2894,42 +2903,42 @@ static isDetailsPage() {
 		this.javdbTokenExpiry = null;
 		console.log('[ExtraFanart] JavDB 凭据已清除');
 	}
-	
+
 	// 将 Emby 的 ticks (100纳秒单位) 转换为格式化的时长字符串
 	static formatRunTime(ticks) {
 		if (!ticks || typeof ticks !== 'number' || ticks <= 0) {
 			return '';
 		}
-		
+
 		// Emby 的 ticks 是以 100 纳秒为单位
 		// 转换为秒：ticks / 10,000,000
 		const totalSeconds = Math.round(ticks / 10000000);
 		const hours = Math.floor(totalSeconds / 3600);
 		const minutes = Math.floor((totalSeconds % 3600) / 60);
-		
+
 		if (hours > 0) {
 			return `${hours}h ${minutes}m`;
 		} else if (minutes > 0) {
 			return `${minutes}m`;
 		}
-		
+
 		return '';
 	}
-	
+
 	// 从标题中提取番号（支持 [ABC-123] 和 ABC-123 格式）
 	static extractCodeFromTitle(title) {
 		if (!title || typeof title !== 'string') {
 			return null;
 		}
-		
+
 		const titleText = title.trim();
-		
+
 		// 方式1：从方括号内提取番号：[ABC-123]
 		const bracketMatch = titleText.match(/\[([^\]]+)\]/);
 		if (bracketMatch && bracketMatch[1]) {
 			return bracketMatch[1];
 		}
-		
+
 		// 方式2：回退方案 - 提取第一个空格之前的内容作为番号
 		const spaceIndex = titleText.indexOf(' ');
 		if (spaceIndex > 0) {
@@ -2938,30 +2947,30 @@ static isDetailsPage() {
 				return potentialCode;
 			}
 		}
-		
+
 		return null;
 	}
-	
+
 	// 处理卡片上的短评按钮点击事件
 	static async handleReviewButtonClick(code, buttonElement) {
 		// 保存原始内容和宽度（在 try 块外，以便 finally 块能访问）
 		let originalText = '';
 		let originalMinWidth = '';
-		
+
 		try {
 			// 如果提供了按钮元素，添加加载状态
 			if (buttonElement) {
 				originalText = buttonElement.textContent;
 				originalMinWidth = buttonElement.style.minWidth;
-				
+
 				// 锁定按钮宽度，添加 loading 类
 				buttonElement.style.minWidth = buttonElement.offsetWidth + 'px';
 				buttonElement.classList.add('loading');
-				
+
 				// 替换按钮内容为加载状态
 				buttonElement.innerHTML = '<span class="jv-btn-spinner"></span>';
 			}
-			
+
 			// 检查是否有保存的凭据，如果没有则显示登录框
 			if (!this.hasCredentials()) {
 				// 恢复按钮状态后再显示弹窗
@@ -2970,14 +2979,14 @@ static isDetailsPage() {
 					buttonElement.textContent = originalText;
 					buttonElement.style.minWidth = originalMinWidth;
 				}
-				
+
 				this.showCredentialsModal(() => {
 					// 登录成功后再次调用
 					this.handleReviewButtonClick(code, buttonElement);
 				});
 				return;
 			}
-			
+
 			try {
 				// 先登录获取 token
 				const token = await this.javdbLogin();
@@ -2988,7 +2997,7 @@ static isDetailsPage() {
 						buttonElement.textContent = originalText;
 						buttonElement.style.minWidth = originalMinWidth;
 					}
-					
+
 					this.showCredentialsModal(() => {
 						// 登录成功后再试一次
 						this.handleReviewButtonClick(code, buttonElement);
@@ -3025,7 +3034,7 @@ static isDetailsPage() {
 
 				// 获取短评数据
 				const reviewsData = await this.getJavdbReviews(movieInfo.movieId, 1, 'hotly');
-				
+
 				// 检查是否有短评，没有则显示提示并返回
 				if (!reviewsData || !reviewsData.reviews || reviewsData.reviews.length === 0) {
 					this.showToast('暂无短评');
@@ -3048,21 +3057,21 @@ static isDetailsPage() {
 			}
 		}
 	}
-	
+
 	// 检查是否有已保存的凭据
 	static hasCredentials() {
 		return !!localStorage.getItem(this.JAVDB_CREDENTIALS_KEY);
 	}
-	
+
 	// 显示凭据输入弹窗
 	static showCredentialsModal(onSuccess) {
 		// 如果弹窗已存在，先移除
 		if (this.credentialsModal) {
 			this.credentialsModal.remove();
 		}
-		
+
 		const hasExisting = this.hasCredentials();
-		
+
 		const modal = document.createElement('div');
 		modal.className = 'jv-reviews-modal';
 		modal.innerHTML = `
@@ -3103,10 +3112,10 @@ static isDetailsPage() {
 				</div>
 			</div>
 		`;
-		
+
 		document.body.appendChild(modal);
 		this.credentialsModal = modal;
-		
+
 		// 获取元素
 		const closeBtn = modal.querySelector('.jv-reviews-close');
 		const backdrop = modal.querySelector('.jv-reviews-backdrop');
@@ -3116,7 +3125,7 @@ static isDetailsPage() {
 		const usernameInput = modal.querySelector('#jv-username');
 		const passwordInput = modal.querySelector('#jv-password');
 		const errorDiv = modal.querySelector('.jv-credentials-error');
-		
+
 		const closeModal = () => {
 			modal.classList.add('closing');
 			setTimeout(() => {
@@ -3124,16 +3133,16 @@ static isDetailsPage() {
 				this.credentialsModal = null;
 			}, 200);
 		};
-		
+
 		const showError = (msg) => {
 			errorDiv.textContent = msg;
 			errorDiv.style.display = 'block';
 		};
-		
+
 		closeBtn.onclick = closeModal;
 		backdrop.onclick = closeModal;
 		cancelBtn.onclick = closeModal;
-		
+
 		// 清除按钮
 		if (clearBtn) {
 			clearBtn.onclick = () => {
@@ -3144,21 +3153,21 @@ static isDetailsPage() {
 				}
 			};
 		}
-		
+
 		// 登录按钮
 		loginBtn.onclick = async () => {
 			const username = usernameInput.value.trim();
 			const password = passwordInput.value;
-			
+
 			if (!username || !password) {
 				showError('请输入用户名和密码');
 				return;
 			}
-			
+
 			loginBtn.textContent = '验证中...';
 			loginBtn.disabled = true;
 			errorDiv.style.display = 'none';
-			
+
 			try {
 				// 尝试登录验证
 				const token = await this.javdbLoginWithCredentials(username, password);
@@ -3179,14 +3188,14 @@ static isDetailsPage() {
 				loginBtn.disabled = false;
 			}
 		};
-		
+
 		// 回车提交
 		passwordInput.addEventListener('keydown', (e) => {
 			if (e.key === 'Enter') {
 				loginBtn.click();
 			}
 		});
-		
+
 		// 按 ESC 关闭
 		const escHandler = (e) => {
 			if (e.key === 'Escape') {
@@ -3195,14 +3204,14 @@ static isDetailsPage() {
 			}
 		};
 		document.addEventListener('keydown', escHandler);
-		
+
 		// 显示动画并聚焦输入框
 		requestAnimationFrame(() => {
 			modal.classList.add('visible');
 			usernameInput.focus();
 		});
 	}
-	
+
 	// 使用指定凭据登录（用于验证）
 	static async javdbLoginWithCredentials(username, password) {
 		try {
@@ -3219,7 +3228,7 @@ static isDetailsPage() {
 				app_version_number: '1.9.29',
 				app_channel: 'official'
 			});
-			
+
 			const response = await fetch(`${url}?${params.toString()}`, {
 				method: 'POST',
 				headers: {
@@ -3228,31 +3237,31 @@ static isDetailsPage() {
 					'jdSignature': this.generateJavdbSignature()
 				}
 			});
-			
+
 			if (!response.ok) {
 				return null;
 			}
-			
+
 			const data = await response.json();
 			if (data.data && data.data.token) {
 				this.javdbToken = data.data.token;
 				const expiry = new Date();
 				expiry.setDate(expiry.getDate() + 30);
 				this.javdbTokenExpiry = expiry.toISOString();
-				
+
 				localStorage.setItem('javdb_token', this.javdbToken);
 				localStorage.setItem('javdb_token_expiry', this.javdbTokenExpiry);
-				
+
 				return this.javdbToken;
 			}
-			
+
 			return null;
 		} catch (error) {
 			console.error('[ExtraFanart] JavDB 登录失败:', error);
 			return null;
 		}
 	}
-	
+
 	// 加载 JavDB 缓存
 	static loadJavdbCache() {
 		try {
@@ -3270,7 +3279,7 @@ static isDetailsPage() {
 			return { movies: {}, reviews: {} };
 		}
 	}
-	
+
 	// 保存 JavDB 缓存
 	static saveJavdbCache() {
 		try {
@@ -3293,13 +3302,13 @@ static isDetailsPage() {
 			}
 		}
 	}
-	
+
 	// 清理过期缓存
 	static cleanExpiredCache(cache) {
 		const now = Date.now();
 		const expiryMs = this.JAVDB_CACHE_EXPIRY_HOURS * 60 * 60 * 1000;
 		let cleaned = 0;
-		
+
 		// 清理过期的影片搜索结果
 		if (cache.movies) {
 			for (const key of Object.keys(cache.movies)) {
@@ -3309,7 +3318,7 @@ static isDetailsPage() {
 				}
 			}
 		}
-		
+
 		// 清理过期的短评
 		if (cache.reviews) {
 			for (const key of Object.keys(cache.reviews)) {
@@ -3319,23 +3328,23 @@ static isDetailsPage() {
 				}
 			}
 		}
-		
+
 		if (cleaned > 0) {
 			console.log('[ExtraFanart] 清理过期缓存:', cleaned, '条');
 		}
 	}
-	
+
 	// 确保缓存大小不超限
 	static ensureCacheSize() {
 		const cacheStr = JSON.stringify(this.javdbCache);
 		const currentSize = cacheStr.length;
-		
+
 		// 如果超过最大大小，清理旧数据
 		if (currentSize > this.JAVDB_CACHE_MAX_SIZE) {
 			console.log('[ExtraFanart] 缓存超限，当前:', (currentSize / 1024).toFixed(2), 'KB，开始清理');
 			this.clearOldestCache(10);
 		}
-		
+
 		// 如果条目数超限，清理旧数据
 		const movieCount = Object.keys(this.javdbCache.movies || {}).length;
 		const reviewCount = Object.keys(this.javdbCache.reviews || {}).length;
@@ -3344,35 +3353,35 @@ static isDetailsPage() {
 			this.clearOldestCache(10);
 		}
 	}
-	
+
 	// 清理最旧的缓存
 	static clearOldestCache(count) {
 		// 收集所有缓存项及其时间戳
 		const items = [];
-		
+
 		if (this.javdbCache.movies) {
 			for (const [key, value] of Object.entries(this.javdbCache.movies)) {
 				items.push({ type: 'movies', key, timestamp: value.timestamp });
 			}
 		}
-		
+
 		if (this.javdbCache.reviews) {
 			for (const [key, value] of Object.entries(this.javdbCache.reviews)) {
 				items.push({ type: 'reviews', key, timestamp: value.timestamp });
 			}
 		}
-		
+
 		// 按时间戳排序，删除最旧的
 		items.sort((a, b) => a.timestamp - b.timestamp);
 		const toDelete = items.slice(0, count);
-		
+
 		for (const item of toDelete) {
 			delete this.javdbCache[item.type][item.key];
 		}
-		
+
 		console.log('[ExtraFanart] 清理了', toDelete.length, '条旧缓存');
 	}
-	
+
 	// 缓存影片搜索结果
 	static cacheMovieSearch(code, movieInfo) {
 		if (!this.javdbCache.movies) {
@@ -3384,23 +3393,23 @@ static isDetailsPage() {
 		};
 		this.saveJavdbCache();
 	}
-	
+
 	// 获取缓存的影片搜索结果
 	static getCachedMovieSearch(code) {
 		if (!this.javdbCache.movies) return null;
 		const cached = this.javdbCache.movies[code.toUpperCase()];
 		if (!cached) return null;
-		
+
 		// 检查是否过期
 		const expiryMs = this.JAVDB_CACHE_EXPIRY_HOURS * 60 * 60 * 1000;
 		if (Date.now() - cached.timestamp > expiryMs) {
 			delete this.javdbCache.movies[code.toUpperCase()];
 			return null;
 		}
-		
+
 		return cached.data;
 	}
-	
+
 	// 缓存短评
 	static cacheReviews(movieId, page, sortBy, reviewsData) {
 		if (!this.javdbCache.reviews) {
@@ -3413,35 +3422,35 @@ static isDetailsPage() {
 		};
 		this.saveJavdbCache();
 	}
-	
+
 	// 获取缓存的短评
 	static getCachedReviews(movieId, page, sortBy) {
 		if (!this.javdbCache.reviews) return null;
 		const cacheKey = `${movieId}_${page}_${sortBy}`;
 		const cached = this.javdbCache.reviews[cacheKey];
 		if (!cached) return null;
-		
+
 		// 检查是否过期
 		const expiryMs = this.JAVDB_CACHE_EXPIRY_HOURS * 60 * 60 * 1000;
 		if (Date.now() - cached.timestamp > expiryMs) {
 			delete this.javdbCache.reviews[cacheKey];
 			return null;
 		}
-		
+
 		return cached.data;
 	}
-	
+
 	// 生成 JavDB API 签名
 	static generateJavdbSignature() {
 		const timestamp = Math.floor(Date.now() / 1000);
 		const secretKey = '71cf27bb3c0bcdf207b64abecddc970098c7421ee7203b9cdae54478478a199e7d5a6e1a57691123c1a931c057842fb73ba3b3c83bcd69c17ccf174081e3d8aa';
 		const signBase = `${timestamp}${secretKey}`;
-		
+
 		// 使用 Web Crypto API 或简单的 MD5 实现
 		const signHash = this.md5(signBase);
 		return `${timestamp}.lpw6vgqzsp.${signHash}`;
 	}
-	
+
 	// 简单的 MD5 实现
 	static md5(string) {
 		function md5cycle(x, k) {
@@ -3581,7 +3590,7 @@ static isDetailsPage() {
 		}
 		return hex(md51(string));
 	}
-	
+
 	// JavDB 登录获取 Token（使用已保存的凭据）
 	static async javdbLogin() {
 		// 检查 token 是否有效
@@ -3592,18 +3601,18 @@ static isDetailsPage() {
 				return this.javdbToken;
 			}
 		}
-		
+
 		// 获取已保存的凭据
 		const credentials = this.getCredentials();
 		if (!credentials) {
 			console.log('[ExtraFanart] 没有保存的 JavDB 凭据');
 			return null;
 		}
-		
+
 		// 使用凭据登录
 		return await this.javdbLoginWithCredentials(credentials.username, credentials.password);
 	}
-	
+
 	// 搜索 JavDB 影片获取 movie_id（带缓存）
 	static async searchJavdbMovie(code) {
 		// 先检查缓存
@@ -3612,7 +3621,7 @@ static isDetailsPage() {
 			console.log('[ExtraFanart] 使用缓存的影片搜索结果:', code);
 			return cached;
 		}
-		
+
 		try {
 			const url = 'https://jdforrepam.com/api/v2/search';
 			const params = new URLSearchParams({
@@ -3625,7 +3634,7 @@ static isDetailsPage() {
 				movie_filter_by: 'all',
 				movie_sort_by: 'relevance'
 			});
-			
+
 			const response = await fetch(`${url}?${params.toString()}`, {
 				method: 'GET',
 				headers: {
@@ -3635,11 +3644,11 @@ static isDetailsPage() {
 					'jdSignature': this.generateJavdbSignature()
 				}
 			});
-			
+
 			if (!response.ok) {
 				throw new Error(`搜索失败: ${response.status}`);
 			}
-			
+
 			const data = await response.json();
 			if (data.data && data.data.movies && data.data.movies.length > 0) {
 				const movie = data.data.movies[0];
@@ -3655,19 +3664,19 @@ static isDetailsPage() {
 				this.cacheMovieSearch(code, movieInfo);
 				return movieInfo;
 			}
-			
+
 			return null;
 		} catch (error) {
 			console.error('[ExtraFanart] JavDB 搜索失败:', error);
 			return null;
 		}
 	}
-	
+
 	// 获取 JavDB 影片详情（包含评分）
 	static async getJavdbMovieDetail(movieId) {
 		try {
 			const url = `https://jdforrepam.com/api/v4/movies/${movieId}`;
-			
+
 			const response = await fetch(url, {
 				method: 'GET',
 				headers: {
@@ -3677,11 +3686,11 @@ static isDetailsPage() {
 					'jdSignature': this.generateJavdbSignature()
 				}
 			});
-			
+
 			if (!response.ok) {
 				throw new Error(`获取详情失败: ${response.status}`);
 			}
-			
+
 			const data = await response.json();
 			if (data.data && data.data.movie) {
 				const movie = data.data.movie;
@@ -3694,14 +3703,14 @@ static isDetailsPage() {
 					commentsCount: movie.comments_count
 				};
 			}
-			
+
 			return null;
 		} catch (error) {
 			console.error('[ExtraFanart] 获取 JavDB 影片详情失败:', error);
 			return null;
 		}
 	}
-	
+
 	// 获取 JavDB 影片短评（带缓存）
 	static async getJavdbReviews(movieId, page = 1, sortBy = 'hotly') {
 		// 先检查缓存
@@ -3710,7 +3719,7 @@ static isDetailsPage() {
 			console.log('[ExtraFanart] 使用缓存的短评数据:', movieId, 'page:', page, 'sort:', sortBy);
 			return cached;
 		}
-		
+
 		try {
 			const url = `https://jdforrepam.com/api/v1/movies/${movieId}/reviews`;
 			const params = new URLSearchParams({
@@ -3718,57 +3727,57 @@ static isDetailsPage() {
 				sort_by: sortBy,
 				limit: 20
 			});
-			
+
 			const headers = {
 				'User-Agent': 'Dart/3.5 (dart:io)',
 				'Accept-Language': 'zh-TW',
 				'Host': 'jdforrepam.com',
 				'jdSignature': this.generateJavdbSignature()
 			};
-			
+
 			// 如果有 token，添加授权头
 			if (this.javdbToken) {
 				headers['Authorization'] = `Bearer ${this.javdbToken}`;
 			}
-			
+
 			const response = await fetch(`${url}?${params.toString()}`, {
 				method: 'GET',
 				headers: headers
 			});
-			
+
 			if (!response.ok) {
 				throw new Error(`获取短评失败: ${response.status}`);
 			}
-			
+
 			const data = await response.json();
 			const reviewsData = data.data;
-			
+
 			// 缓存结果
 			if (reviewsData) {
 				this.cacheReviews(movieId, page, sortBy, reviewsData);
 			}
-			
+
 			return reviewsData;
 		} catch (error) {
 			console.error('[ExtraFanart] 获取 JavDB 短评失败:', error);
 			return null;
 		}
 	}
-	
+
 	// 添加 JavDB 短评按钮
 	static addJavdbReviewButton(container) {
 		// 检查是否已经存在按钮
 		if (container.querySelector('.jv-javdb-review-btn')) {
 			return;
 		}
-		
+
 		// 创建按钮容器
 		const buttonWrapper = document.createElement('div');
 		buttonWrapper.className = 'jv-javdb-btn-wrapper';
 		buttonWrapper.style.display = 'inline-flex';
 		buttonWrapper.style.alignItems = 'center';
 		buttonWrapper.style.gap = '4px';
-		
+
 		const button = document.createElement('button');
 		button.className = 'jv-web-link jv-javdb-review-btn';
 		button.textContent = '短评';
@@ -3777,78 +3786,78 @@ static isDetailsPage() {
 		button.style.borderColor = '#00a4dc';
 		button.style.cursor = 'pointer';
 		button.style.background = 'transparent';
-		
+
 		button.onclick = async (e) => {
 			e.preventDefault();
 			e.stopPropagation();
-			
+
 			// 获取当前番号
 			const cachedCodeInfo = this.cachedCodes.get(this.itemId);
 			if (!cachedCodeInfo || !cachedCodeInfo.code) {
 				this.showToast('无法获取番号');
 				return;
 			}
-			
+
 			const code = cachedCodeInfo.code;
-			
-		// 检查是否有已保存的凭据
-		if (!this.hasCredentials()) {
-			// 没有凭据，显示输入弹窗
-			this.showCredentialsModal(() => {
-				// 登录成功后更新齿轮按钮状态
-				if (settingsBtn.updateState) {
-					settingsBtn.updateState();
-				}
-				// 自动获取短评
-				button.click();
-			});
-			return;
-		}			console.log('[ExtraFanart] 获取短评，番号:', code);
-			
-			// 显示加载中
-			button.textContent = '加载中...';
-			button.disabled = true;
-			
-			try {
-			// 先登录获取 token
-			const token = await this.javdbLogin();
-			if (!token) {
-				// Token 获取失败，可能凭据过期，提示重新输入
+
+			// 检查是否有已保存的凭据
+			if (!this.hasCredentials()) {
+				// 没有凭据，显示输入弹窗
 				this.showCredentialsModal(() => {
 					// 登录成功后更新齿轮按钮状态
 					if (settingsBtn.updateState) {
 						settingsBtn.updateState();
 					}
+					// 自动获取短评
 					button.click();
 				});
 				return;
-			}				
-                
-                // 搜索影片获取 movie_id
+			} console.log('[ExtraFanart] 获取短评，番号:', code);
+
+			// 显示加载中
+			button.textContent = '加载中...';
+			button.disabled = true;
+
+			try {
+				// 先登录获取 token
+				const token = await this.javdbLogin();
+				if (!token) {
+					// Token 获取失败，可能凭据过期，提示重新输入
+					this.showCredentialsModal(() => {
+						// 登录成功后更新齿轮按钮状态
+						if (settingsBtn.updateState) {
+							settingsBtn.updateState();
+						}
+						button.click();
+					});
+					return;
+				}
+
+				// 搜索影片获取 movie_id
 				let movieInfo = await this.searchJavdbMovie(code);
 
-                // ============================================================
-                // [新增逻辑开始]：针对 123abc-123 格式的重试机制
-                // ============================================================
-                if (!movieInfo) {
-                    // 正则检查：以数字开头，紧接着是字母 (不区分大小写)
-                    // 例如匹配 123abc-123 中的 123
-                    if (/^\d+[a-z]/i.test(code)) {
-                        // 去除开头的数字
-                        const retryCode = code.replace(/^\d+(?=[a-z])/i, '');
-                        console.log(`[ExtraFanart] 原番号 ${code} 未找到，尝试优化番号搜索: ${retryCode}`);
-                        movieInfo = await this.searchJavdbMovie(retryCode);
-                    }
-                }
-                // ============================================================
-                // [新增逻辑结束]
-                // ============================================================
-				
+				// ============================================================
+				// [新增逻辑开始]：针对 123abc-123 格式的重试机制
+				// ============================================================
+				if (!movieInfo) {
+					// 正则检查：以数字开头，紧接着是字母 (不区分大小写)
+					// 例如匹配 123abc-123 中的 123
+					if (/^\d+[a-z]/i.test(code)) {
+						// 去除开头的数字
+						const retryCode = code.replace(/^\d+(?=[a-z])/i, '');
+						console.log(`[ExtraFanart] 原番号 ${code} 未找到，尝试优化番号搜索: ${retryCode}`);
+						movieInfo = await this.searchJavdbMovie(retryCode);
+					}
+				}
+				// ============================================================
+				// [新增逻辑结束]
+				// ============================================================
+
 				if (!movieInfo) {
 					this.showToast('未找到该影片');
 					return;
 				}
-				
+
 				// 如果没有评分，获取详情补充评分
 				if (!movieInfo.score) {
 					const detail = await this.getJavdbMovieDetail(movieInfo.movieId);
@@ -3856,49 +3865,49 @@ static isDetailsPage() {
 						movieInfo.score = detail.score;
 						movieInfo.commentsCount = detail.commentsCount;
 						// 更新缓存（注意：这里使用最后成功的代码进行缓存更新可能有歧义，但保持原逻辑即可）
-                        // 如果是重试成功的，建议用原始code还是retryCode缓存取决于你希望下次是否还走重试
-						this.cacheMovieSearch(code, movieInfo); 
+						// 如果是重试成功的，建议用原始code还是retryCode缓存取决于你希望下次是否还走重试
+						this.cacheMovieSearch(code, movieInfo);
 					}
 				}
-				
+
 				// 获取短评（获取更多条以便排序）
 				const reviewsData = await this.getJavdbReviews(movieInfo.movieId, 1, 'hotly');
 				if (!reviewsData || !reviewsData.reviews || reviewsData.reviews.length === 0) {
 					this.showToast('暂无短评');
 					return;
 				}
-				
+
 				// 显示短评弹窗
 				this.showReviewsModal(movieInfo, reviewsData);
-				
-		} catch (error) {
-			console.error('[ExtraFanart] 获取短评失败:', error);
-			this.showToast('获取短评失败');
-		} finally {
-			button.textContent = '短评';
-			button.disabled = false;
-		}
-	};
-	
-	// 创建齿轮设置按钮
-	const settingsBtn = document.createElement('button');
-	settingsBtn.className = 'jv-javdb-settings-btn';
-	settingsBtn.title = '清除 JavDB 凭据';
-	settingsBtn.innerHTML = `
+
+			} catch (error) {
+				console.error('[ExtraFanart] 获取短评失败:', error);
+				this.showToast('获取短评失败');
+			} finally {
+				button.textContent = '短评';
+				button.disabled = false;
+			}
+		};
+
+		// 创建齿轮设置按钮
+		const settingsBtn = document.createElement('button');
+		settingsBtn.className = 'jv-javdb-settings-btn';
+		settingsBtn.title = '清除 JavDB 凭据';
+		settingsBtn.innerHTML = `
 		<svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2">
 			<circle cx="12" cy="12" r="3"></circle>
 			<path d="M12 1v6m0 6v6M5.64 5.64l4.24 4.24m4.24 4.24l4.24 4.24M1 12h6m6 0h6M5.64 18.36l4.24-4.24m4.24-4.24l4.24-4.24"></path>
 		</svg>
 	`;
-	
-	// 更新按钮状态的函数
-	const updateSettingsBtnState = () => {
-		const hasCredentials = this.hasCredentials();
-		settingsBtn.style.opacity = hasCredentials ? '1' : '0.3';
-		settingsBtn.style.pointerEvents = hasCredentials ? 'auto' : 'none';
-	};
-	
-	settingsBtn.style.cssText = `
+
+		// 更新按钮状态的函数
+		const updateSettingsBtnState = () => {
+			const hasCredentials = this.hasCredentials();
+			settingsBtn.style.opacity = hasCredentials ? '1' : '0.3';
+			settingsBtn.style.pointerEvents = hasCredentials ? 'auto' : 'none';
+		};
+
+		settingsBtn.style.cssText = `
 		background: transparent;
 		border: 1px solid rgba(0, 164, 220, 0.5);
 		border-radius: 4px;
@@ -3912,54 +3921,54 @@ static isDetailsPage() {
 		opacity: ${this.hasCredentials() ? '1' : '0.3'};
 		pointer-events: ${this.hasCredentials() ? 'auto' : 'none'};
 	`;
-	
-	// 将更新函数存储在按钮上,以便外部调用
-	settingsBtn.updateState = updateSettingsBtnState;
-	
-	settingsBtn.onmouseenter = () => {
-		if (this.hasCredentials()) {
-			settingsBtn.style.color = '#00a4dc';
-			settingsBtn.style.borderColor = '#00a4dc';
-			settingsBtn.style.background = 'rgba(0, 164, 220, 0.1)';
-		}
-	};
-	
-	settingsBtn.onmouseleave = () => {
-		settingsBtn.style.color = 'rgba(0, 164, 220, 0.7)';
-		settingsBtn.style.borderColor = 'rgba(0, 164, 220, 0.5)';
-		settingsBtn.style.background = 'transparent';
-	};
-	
-	settingsBtn.onclick = (e) => {
-		e.preventDefault();
-		e.stopPropagation();
-		
-		if (!this.hasCredentials()) {
-			return;
-		}
-		
-		if (confirm('确定要清除已保存的 JavDB 账号吗?清除后下次使用时需要重新输入。')) {
-			this.clearCredentials();
-			this.showToast('JavDB 账号已清除');
-			// 更新按钮状态
-			settingsBtn.style.opacity = '0.3';
-			settingsBtn.style.pointerEvents = 'none';
-		}
-	};
-	
-	buttonWrapper.appendChild(button);
-	buttonWrapper.appendChild(settingsBtn);
-	container.appendChild(buttonWrapper);
-}	// 创建并显示短评弹窗
+
+		// 将更新函数存储在按钮上,以便外部调用
+		settingsBtn.updateState = updateSettingsBtnState;
+
+		settingsBtn.onmouseenter = () => {
+			if (this.hasCredentials()) {
+				settingsBtn.style.color = '#00a4dc';
+				settingsBtn.style.borderColor = '#00a4dc';
+				settingsBtn.style.background = 'rgba(0, 164, 220, 0.1)';
+			}
+		};
+
+		settingsBtn.onmouseleave = () => {
+			settingsBtn.style.color = 'rgba(0, 164, 220, 0.7)';
+			settingsBtn.style.borderColor = 'rgba(0, 164, 220, 0.5)';
+			settingsBtn.style.background = 'transparent';
+		};
+
+		settingsBtn.onclick = (e) => {
+			e.preventDefault();
+			e.stopPropagation();
+
+			if (!this.hasCredentials()) {
+				return;
+			}
+
+			if (confirm('确定要清除已保存的 JavDB 账号吗?清除后下次使用时需要重新输入。')) {
+				this.clearCredentials();
+				this.showToast('JavDB 账号已清除');
+				// 更新按钮状态
+				settingsBtn.style.opacity = '0.3';
+				settingsBtn.style.pointerEvents = 'none';
+			}
+		};
+
+		buttonWrapper.appendChild(button);
+		buttonWrapper.appendChild(settingsBtn);
+		container.appendChild(buttonWrapper);
+	}	// 创建并显示短评弹窗
 	static showReviewsModal(movieInfo, reviewsData) {
 		// 如果弹窗已存在，先移除
 		if (this.reviewsModal) {
 			this.reviewsModal.remove();
 		}
-		
+
 		// 按点赞数排序短评
 		const sortedReviews = [...reviewsData.reviews].sort((a, b) => (b.likes_count || 0) - (a.likes_count || 0));
-		
+
 		const modal = document.createElement('div');
 		modal.className = 'jv-reviews-modal';
 		modal.innerHTML = `
@@ -3994,14 +4003,14 @@ static isDetailsPage() {
 				</div>
 			</div>
 		`;
-		
+
 		document.body.appendChild(modal);
 		this.reviewsModal = modal;
-		
+
 		// 当前状态
 		let currentPage = 1;
 		const totalPages = reviewsData.pagination?.total_pages || 1;
-		
+
 		// 绑定事件
 		const closeBtn = modal.querySelector('.jv-reviews-close');
 		const backdrop = modal.querySelector('.jv-reviews-backdrop');
@@ -4009,7 +4018,7 @@ static isDetailsPage() {
 		const nextBtn = modal.querySelector('.jv-next-page');
 		const pageInfo = modal.querySelector('.jv-reviews-page-info');
 		const reviewsList = modal.querySelector('.jv-reviews-list');
-		
+
 		const closeModal = () => {
 			modal.classList.add('closing');
 			setTimeout(() => {
@@ -4017,10 +4026,10 @@ static isDetailsPage() {
 				this.reviewsModal = null;
 			}, 200);
 		};
-		
+
 		closeBtn.onclick = closeModal;
 		backdrop.onclick = closeModal;
-		
+
 		// 按 ESC 关闭
 		const escHandler = (e) => {
 			if (e.key === 'Escape') {
@@ -4029,14 +4038,14 @@ static isDetailsPage() {
 			}
 		};
 		document.addEventListener('keydown', escHandler);
-		
+
 		// 分页
 		const loadPage = async (page) => {
 			if (page < 1 || page > totalPages) return;
-			
+
 			currentPage = page;
 			reviewsList.innerHTML = '<div class="jv-reviews-loading">加载中...</div>';
-			
+
 			const newData = await this.getJavdbReviews(movieInfo.movieId, currentPage, 'hotly');
 			if (newData && newData.reviews) {
 				// 按点赞数排序
@@ -4047,52 +4056,52 @@ static isDetailsPage() {
 				reviewsList.scrollTop = 0;
 			}
 		};
-		
+
 		if (prevBtn) {
 			prevBtn.onclick = () => loadPage(currentPage - 1);
 		}
 		if (nextBtn) {
 			nextBtn.onclick = () => loadPage(currentPage + 1);
 		}
-		
+
 		// 显示动画
 		requestAnimationFrame(() => {
 			modal.classList.add('visible');
 		});
 	}
-	
+
 	// 渲染短评列表
 	static renderReviews(reviews) {
 		if (!reviews || reviews.length === 0) {
 			return '<div class="jv-reviews-empty">暂无短评</div>';
 		}
-		
+
 		return reviews.map(review => {
 			// 1. 改进的用户信息提取逻辑
 			const user = review.user || {};
-			
+
 			// 尝试从多个可能的字段获取用户名
-			const username = user.username || 
-							 user.name || 
-							 review.user_name || 
-							 review.username || 
-							 '匿名用户';
+			const username = user.username ||
+				user.name ||
+				review.user_name ||
+				review.username ||
+				'匿名用户';
 
 			// 尝试获取头像，增加默认占位图逻辑
-			const avatar = user.avatar_url || 
-						   review.user_avatar || 
-						   'data:image/svg+xml;base64,PHN2ZyB4bWxucz0iaHR0cDovL3d3dy53My5vcmcvMjAwMC9zdmciIHdpZHRoPSI0MCIgaGVpZ2h0PSI0MCIgdmlld0JveD0iMCAwIDI0IDI0IiBmaWxsPSIjNjY2Ij48cGF0aCBkPSJNMTIgMTJjMi4yMSAwIDQtMS43OSA0LTRzLTEuNzktNC00LTQtNCAxLjc5LTQgNCAxLjc5IDQgNCA0em0wIDJjLTIuNjcgMC04IDEuMzQtOCA0djJoMTZ2LTJjMC0yLjY2LTUuMzMtNC04LTR6Ii8+PC9zdmc+';
-			
+			const avatar = user.avatar_url ||
+				review.user_avatar ||
+				'data:image/svg+xml;base64,PHN2ZyB4bWxucz0iaHR0cDovL3d3dy53My5vcmcvMjAwMC9zdmciIHdpZHRoPSI0MCIgaGVpZ2h0PSI0MCIgdmlld0JveD0iMCAwIDI0IDI0IiBmaWxsPSIjNjY2Ij48cGF0aCBkPSJNMTIgMTJjMi4yMSAwIDQtMS43OSA0LTRzLTEuNzktNC00LTQtNCAxLjc5LTQgNCAxLjc5IDQgNCA0em0wIDJjLTIuNjcgMC04IDEuMzQtOCA0djJoMTZ2LTJjMC0yLjY2LTUuMzMtNC04LTR6Ii8+PC9zdmc+';
+
 			const score = review.score ? `${review.score}分` : '';
 			const content = review.content || '';
 			const likes = review.likes_count || 0;
 			const createdAt = this.formatReviewDate(review.created_at);
-			
+
 			// 用户标签（增加对 contributor 字段的容错）
 			const tags = [];
 			if (user.is_vip || review.is_vip) tags.push('<span class="jv-review-tag vip">VIP</span>');
 			if (user.is_contributor || review.is_contributor) tags.push('<span class="jv-review-tag contributor">贡献者</span>');
-			
+
 			return `
 				<div class="jv-review-item">
 					<div class="jv-review-header">
@@ -4121,7 +4130,7 @@ static isDetailsPage() {
 			`;
 		}).join('');
 	}
-	
+
 	// 格式化日期
 	static formatReviewDate(dateStr) {
 		if (!dateStr) return '';
@@ -4129,29 +4138,29 @@ static isDetailsPage() {
 			const date = new Date(dateStr);
 			const now = new Date();
 			const diff = now - date;
-			
+
 			const minutes = Math.floor(diff / 60000);
 			const hours = Math.floor(diff / 3600000);
 			const days = Math.floor(diff / 86400000);
-			
+
 			if (minutes < 1) return '刚刚';
 			if (minutes < 60) return `${minutes}分钟前`;
 			if (hours < 24) return `${hours}小时前`;
 			if (days < 30) return `${days}天前`;
-			
+
 			return date.toLocaleDateString('zh-CN');
 		} catch {
 			return dateStr;
 		}
 	}
-	
+
 	// HTML 转义
 	static escapeHtml(text) {
 		const div = document.createElement('div');
 		div.textContent = text;
 		return div.innerHTML;
 	}
-	
+
 	// 更新分页状态
 	static updatePagination(pageInfo, prevBtn, nextBtn, currentPage, totalPages) {
 		if (pageInfo) {
@@ -5329,7 +5338,7 @@ static isDetailsPage() {
 				}
 			}
 		`;
-		
+
 		const style = document.createElement('style');
 		style.type = 'text/css';
 		style.innerHTML = css;
@@ -5343,9 +5352,9 @@ static isDetailsPage() {
 			console.log('[ExtraFanart] 演员其他作品功能已禁用');
 			return;
 		}
-		
+
 		if (!this.itemId || typeof ApiClient === 'undefined') return;
-		
+
 		// 立即隐藏所有演员容器，避免显示旧内容或空白框
 		let containerIndex = 0;
 		while (true) {
@@ -5359,23 +5368,23 @@ static isDetailsPage() {
 				break;
 			}
 		}
-		
+
 		// 检查是否还在详情页
 		if (!this.isDetailsPage()) {
 			console.log('[ExtraFanart] 已离开详情页，取消加载演员作品');
 			return;
 		}
-		
+
 		try {
 			const item = await this.getItemDetails(this.itemId);
 			if (!item || item.Type !== 'Movie') return;
-			
+
 			// 获取演员名字（最多3个）
 			const actorNames = this.getActorNames(item, 3);
 			if (actorNames.length === 0) return;
-			
+
 			console.log('[ExtraFanart] 找到', actorNames.length, '个演员:', actorNames);
-			
+
 			// 为每个演员获取其他影片
 			const actorsData = [];
 			for (const actorName of actorNames) {
@@ -5389,49 +5398,50 @@ static isDetailsPage() {
 					console.log('[ExtraFanart]', actorName, '的作品数:', shuffledItems.length);
 				}
 			}
-			
-		if (actorsData.length === 0) return;
-		
-		// 保存加载时的 itemId，用于后续检查
-		const loadedItemId = this.itemId;
-		
-		// 无论是否在详情页，都先缓存数据，以便返回时恢复
-		this.cachedActorItems.set(loadedItemId, { actors: actorsData });
-		console.log('[ExtraFanart] 已缓存', actorsData.length, '个演员的作品数据');
-		
-		// 再次检查是否还在详情页（异步加载期间用户可能离开）
-		if (!this.isDetailsPage()) {
-			console.log('[ExtraFanart] 加载完成后检查：已离开详情页，数据已缓存但取消显示');
-			return;
-		}
-		
-		// 最终检查：确保 itemId 没有变化（用户可能快速切换页面）
-		if (this.itemId !== loadedItemId) {
-			console.log('[ExtraFanart] itemId已变化，取消显示演员作品', { loaded: loadedItemId, current: this.itemId });
-			return;
-		}
-		
-		// 显示所有演员的作品
-		this.displayAllActorsItems(actorsData);		} catch (error) {
+
+			if (actorsData.length === 0) return;
+
+			// 保存加载时的 itemId，用于后续检查
+			const loadedItemId = this.itemId;
+
+			// 无论是否在详情页，都先缓存数据，以便返回时恢复
+			this.cachedActorItems.set(loadedItemId, { actors: actorsData });
+			console.log('[ExtraFanart] 已缓存', actorsData.length, '个演员的作品数据');
+
+			// 再次检查是否还在详情页（异步加载期间用户可能离开）
+			if (!this.isDetailsPage()) {
+				console.log('[ExtraFanart] 加载完成后检查：已离开详情页，数据已缓存但取消显示');
+				return;
+			}
+
+			// 最终检查：确保 itemId 没有变化（用户可能快速切换页面）
+			if (this.itemId !== loadedItemId) {
+				console.log('[ExtraFanart] itemId已变化，取消显示演员作品', { loaded: loadedItemId, current: this.itemId });
+				return;
+			}
+
+			// 显示所有演员的作品
+			this.displayAllActorsItems(actorsData);
+		} catch (error) {
 			console.error('[ExtraFanart] 加载演员作品失败:', error);
 		}
 	}
 
 	static displayCachedActorItems(itemId) {
 		console.log('[ExtraFanart] displayCachedActorItems 调用', { itemId, hasCache: this.cachedActorItems.has(itemId) });
-		
+
 		// 检查 itemId 是否匹配，防止显示错误的缓存
 		if (this.itemId !== itemId) {
 			console.log('[ExtraFanart] itemId不匹配，取消显示缓存的演员作品', { cached: itemId, current: this.itemId });
 			return;
 		}
-		
+
 		const cachedActorInfo = this.cachedActorItems.get(itemId);
 		if (!cachedActorInfo) {
 			console.log('[ExtraFanart] 没有找到缓存的演员作品');
 			return;
 		}
-		
+
 		// 立即隐藏所有演员容器，防止显示旧内容
 		let containerIndex = 0;
 		while (true) {
@@ -5445,11 +5455,11 @@ static isDetailsPage() {
 				break;
 			}
 		}
-		
+
 		// 兼容旧格式（单个演员）和新格式（多个演员）
 		const actorsData = cachedActorInfo.actors || [{ actorName: cachedActorInfo.actorName, items: cachedActorInfo.items }];
 		console.log('[ExtraFanart] 找到缓存的演员作品，演员数:', actorsData.length);
-		
+
 		console.log('[ExtraFanart] 显示演员作品容器');
 		this.displayAllActorsItems(actorsData);
 	}
@@ -5458,7 +5468,7 @@ static isDetailsPage() {
 		// 从 People 中获取演员，最多取前 maxCount 个
 		const actors = item.People?.filter(person => person.Type === 'Actor') || [];
 		if (actors.length === 0) return [];
-		
+
 		// 返回前 maxCount 个演员的名字
 		return actors.slice(0, maxCount).map(actor => actor.Name);
 	}
@@ -5472,13 +5482,13 @@ static isDetailsPage() {
 				Person: actorName,
 				Limit: 100
 			});
-			
+
 			if (!result || !result.Items || result.Items.length === 0) return [];
-			
+
 			// 过滤掉当前影片
 			let items = result.Items.filter(movie => movie.Id !== currentItemId);
 			return items;
-			
+
 		} catch (error) {
 			console.error('[ExtraFanart] 获取演员影片失败:', error);
 			return [];
@@ -5488,9 +5498,9 @@ static isDetailsPage() {
 	// 显示所有演员的作品（支持多个演员）
 	static displayAllActorsItems(actorsData) {
 		if (!actorsData || actorsData.length === 0) return;
-		
+
 		console.log('[ExtraFanart] 准备显示', actorsData.length, '个演员的作品');
-		
+
 		// 依次显示每个演员的作品
 		for (let i = 0; i < actorsData.length; i++) {
 			const { actorName, items } = actorsData[i];
@@ -5500,16 +5510,16 @@ static isDetailsPage() {
 
 	static displayActorMoreItems(actorName, items, actorIndex = 0) {
 		if (!items || items.length === 0) return;
-		
+
 		// 检查是否还在详情页
 		if (!this.isDetailsPage()) {
 			console.log(`[ExtraFanart] 已离开详情页，取消显示演员作品${actorIndex}`);
 			return;
 		}
-		
+
 		// 根据索引生成不同的容器ID
 		const containerId = actorIndex === 0 ? 'jv-actor-container' : `jv-actor-container-${actorIndex}`;
-		
+
 		// 创建或获取容器
 		let actorContainer = document.querySelector(`#${containerId}`);
 		if (actorContainer) {
@@ -5522,7 +5532,7 @@ static isDetailsPage() {
 				const isVisible = actorContainer.style.display === 'block';
 				const detailPage = document.querySelector('#itemDetailPage:not(.hide), .itemView:not(.hide)');
 				const inDOM = detailPage && detailPage.contains(actorContainer);
-				
+
 				if (isVisible && hasContent && inDOM) {
 					console.log(`[ExtraFanart] 演员作品容器${actorIndex}已存在且匹配，跳过`);
 					return;
@@ -5538,7 +5548,7 @@ static isDetailsPage() {
 			actorContainer.style.display = 'none'; // 初始隐藏，等内容加载完成后再显示
 			console.log(`[ExtraFanart] 创建新的演员作品容器${actorIndex}`);
 		}
-		
+
 		actorContainer.innerHTML = `
 			<div class="jv-section-header">
 				<h2 class="jv-section-title jv-actor-title">
@@ -5556,10 +5566,10 @@ static isDetailsPage() {
 				<button class="jv-scroll-btn jv-scroll-right">›</button>
 			</div>
 		`;
-		
+
 		console.log('[ExtraFanart] 准备添加', items.length, '个演员作品');
 		const gridContainer = actorContainer.querySelector('.jv-actor-grid');
-		
+
 		// 使用 DocumentFragment 批量添加卡片，避免重排
 		const fragment = document.createDocumentFragment();
 		items.forEach(item => {
@@ -5567,53 +5577,53 @@ static isDetailsPage() {
 			fragment.appendChild(card);
 		});
 		gridContainer.appendChild(fragment);
-		
+
 		// 更新作品数量显示
 		const countElement = actorContainer.querySelector('.jv-actor-count');
 		if (countElement) {
 			countElement.textContent = `共 ${items.length} 部`;
 		}
-		
+
 		// 确保容器在正确的详情页DOM中
 		const detailPage = document.querySelector('#itemDetailPage:not(.hide), .itemView:not(.hide)');
 		const isInCorrectPage = detailPage && detailPage.contains(actorContainer);
-		
+
 		console.log('[ExtraFanart] 演员作品容器DOM检查:', {
 			detailPageExists: !!detailPage,
 			containerInDOM: document.body.contains(actorContainer),
 			containerInCorrectPage: isInCorrectPage
 		});
-		
+
 		// 如果容器不在正确的详情页中，需要重新插入
 		if (!isInCorrectPage && actorContainer.parentNode) {
 			console.log('[ExtraFanart] 容器在错误位置，移除后重新插入');
 			actorContainer.parentNode.removeChild(actorContainer);
 		}
-		
+
 		// 插入逻辑：多个演员容器应该连续排列
 		const detailPageForInsert = document.querySelector('#itemDetailPage:not(.hide), .itemView:not(.hide)');
 		const similarContainer = detailPageForInsert ? detailPageForInsert.querySelector('#jv-similar-container') : null;
 		const imageContainer = detailPageForInsert ? detailPageForInsert.querySelector('#jv-image-container') : null;
 		const castSection = document.querySelector('#itemDetailPage:not(.hide) #castCollapsible') ||
-		                    document.querySelector('.itemView:not(.hide) .peopleSection');
-		
+			document.querySelector('.itemView:not(.hide) .peopleSection');
+
 		// 查找前一个演员容器
 		let previousActorContainer = null;
 		if (actorIndex > 0) {
 			const previousContainerId = actorIndex === 1 ? 'jv-actor-container' : `jv-actor-container-${actorIndex - 1}`;
 			previousActorContainer = detailPageForInsert ? detailPageForInsert.querySelector(`#${previousContainerId}`) : null;
 		}
-		
+
 		console.log(`[ExtraFanart] 演员作品${actorIndex}插入位置检查:`, {
 			hasDetailPage: !!detailPageForInsert,
 			hasSimilarContainer: !!similarContainer,
 			hasImageContainer: !!imageContainer,
 			hasPreviousActorContainer: !!previousActorContainer
 		});
-		
+
 		// 尝试插入位置
 		let inserted = false;
-		
+
 		// 优先：如果有前一个演员容器，插入到它后面（保证连续排列）
 		if (previousActorContainer && document.body.contains(previousActorContainer)) {
 			if (!document.body.contains(actorContainer)) {
@@ -5628,12 +5638,12 @@ static isDetailsPage() {
 		} else if (actorIndex === 0) {
 			// 第一个演员容器：根据相似影片或剧照来定位
 			// 检查相似影片是否真正加载完成（不仅在DOM中，还要有内容、显示状态、itemId匹配）
-			const isSimilarReady = similarContainer && 
-			                       document.body.contains(similarContainer) &&
-			                       similarContainer.style.display !== 'none' &&
-			                       similarContainer.getAttribute('data-item-id') === this.itemId &&
-			                       similarContainer.querySelector('.jv-similar-grid')?.children.length > 0;
-			
+			const isSimilarReady = similarContainer &&
+				document.body.contains(similarContainer) &&
+				similarContainer.style.display !== 'none' &&
+				similarContainer.getAttribute('data-item-id') === this.itemId &&
+				similarContainer.querySelector('.jv-similar-grid')?.children.length > 0;
+
 			console.log('[ExtraFanart] 相似影片容器就绪检查:', {
 				exists: !!similarContainer,
 				inDOM: similarContainer ? document.body.contains(similarContainer) : false,
@@ -5643,7 +5653,7 @@ static isDetailsPage() {
 				hasContent: similarContainer?.querySelector('.jv-similar-grid')?.children.length || 0,
 				isSimilarReady
 			});
-			
+
 			if (isSimilarReady) {
 				// 如果相似影片真正加载完成，插入到它后面
 				if (!document.body.contains(actorContainer)) {
@@ -5670,7 +5680,7 @@ static isDetailsPage() {
 				}
 			}
 		}
-		
+
 		// 如果都没有找到，延迟重试
 		if (!inserted) {
 			setTimeout(() => {
@@ -5684,16 +5694,16 @@ static isDetailsPage() {
 					const retrySimilar = document.querySelector('#jv-similar-container');
 					const retryImage = document.querySelector('#jv-image-container');
 					const retryCast = document.querySelector('#itemDetailPage:not(.hide) #castCollapsible') ||
-					                  document.querySelector('.itemView:not(.hide) .peopleSection');
-					
+						document.querySelector('.itemView:not(.hide) .peopleSection');
+
 					if (!document.body.contains(actorContainer)) {
 						// 检查相似影片是否真正完成
-						const isSimilarReady = retrySimilar && 
-						                       document.body.contains(retrySimilar) &&
-						                       retrySimilar.style.display !== 'none' &&
-						                       retrySimilar.getAttribute('data-item-id') === this.itemId &&
-						                       retrySimilar.querySelector('.jv-similar-grid')?.children.length > 0;
-						
+						const isSimilarReady = retrySimilar &&
+							document.body.contains(retrySimilar) &&
+							retrySimilar.style.display !== 'none' &&
+							retrySimilar.getAttribute('data-item-id') === this.itemId &&
+							retrySimilar.querySelector('.jv-similar-grid')?.children.length > 0;
+
 						if (isSimilarReady) {
 							retrySimilar.insertAdjacentElement('afterend', actorContainer);
 						} else if (retryImage && document.body.contains(retryImage)) {
@@ -5706,12 +5716,12 @@ static isDetailsPage() {
 				actorContainer.style.display = 'block';
 			}, 300);
 		}
-		
+
 		// 内容加载完成，显示容器
 		actorContainer.style.display = 'block';
 		actorContainer.setAttribute('data-item-id', this.itemId);
 		console.log(`[ExtraFanart] 演员作品容器${actorIndex}已显示 (${actorName}), itemId:`, this.itemId);
-		
+
 		// 添加刷新功能
 		const titleElement = actorContainer.querySelector('.jv-actor-title');
 		if (titleElement) {
@@ -5719,10 +5729,10 @@ static isDetailsPage() {
 			titleElement.title = '点击刷新';
 			titleElement.onclick = () => this.loadActorMoreItems();
 		}
-		
+
 		// 添加横向滚动功能
 		this.setupActorScrollButtons(actorContainer);
-		
+
 		// 添加悬停预告片效果
 		setTimeout(() => {
 			this.addHoverTrailerEffectForActor();
@@ -5734,7 +5744,7 @@ static isDetailsPage() {
 		card.className = 'jv-similar-card';
 		card.dataset.itemId = item.Id;
 		card.dataset.localTrailerCount = item.LocalTrailerCount || 0;
-		
+
 		// 优先使用横版封面
 		let imgUrl = '';
 		if (item.ImageTags && item.ImageTags.Thumb) {
@@ -5752,16 +5762,16 @@ static isDetailsPage() {
 				maxWidth: 220
 			});
 		}
-		
+
 		const year = item.ProductionYear || '';
 		const name = item.Name || '';
 		const runTime = this.formatRunTime(item.RunTimeTicks);
 		const rating = item.CommunityRating ? item.CommunityRating.toFixed(1) : '';
 		const code = this.extractCodeFromTitle(name);
-		
+
 		// 使用 RemoteTrailers 判断是否有预告片
 		const hasTrailer = (item.RemoteTrailers && item.RemoteTrailers.length > 0) || (item.LocalTrailerCount || 0) > 0;
-		
+
 		// 构建元数据字符串：年份 | 时长 | ⭐️评分
 		let metadataStr = year;
 		if (runTime) {
@@ -5770,10 +5780,10 @@ static isDetailsPage() {
 		if (rating) {
 			metadataStr = metadataStr ? `${metadataStr} · ★ ${rating}` : `★ ${rating}`;
 		}
-		
+
 		// 构建短评按钮的 HTML（仅当能够提取到番号时）
 		const reviewBtnHtml = code ? `<button class="jv-card-review-btn" data-code="${code}" title="查看 JavDB 短评">短评</button>` : '';
-		
+
 		card.innerHTML = `
 			<div class="jv-similar-card-image ${hasTrailer ? 'has-trailer' : ''}">
 				<img src="${imgUrl}" alt="${name}" loading="lazy" decoding="async" />
@@ -5787,7 +5797,7 @@ static isDetailsPage() {
 				</div>
 			</div>
 		`;
-		
+
 		// 为短评按钮绑定点击事件
 		if (code) {
 			const reviewBtn = card.querySelector('.jv-card-review-btn');
@@ -5799,7 +5809,7 @@ static isDetailsPage() {
 				};
 			}
 		}
-		
+
 		// 根据图片宽高比动态调整显示方式
 		const img = card.querySelector('img');
 		if (img) {
@@ -5815,7 +5825,7 @@ static isDetailsPage() {
 					}
 				}
 			};
-			
+
 			// 图片加载完成时调整
 			if (img.complete) {
 				adjustImageFit();
@@ -5823,7 +5833,7 @@ static isDetailsPage() {
 				img.addEventListener('load', adjustImageFit);
 			}
 		}
-		
+
 		card.onclick = () => {
 			if (typeof Emby !== 'undefined' && Emby.Page && Emby.Page.showItem) {
 				Emby.Page.showItem(item.Id);
@@ -5831,7 +5841,7 @@ static isDetailsPage() {
 				window.location.hash = `#!/item?id=${item.Id}`;
 			}
 		};
-		
+
 		return card;
 	}
 
@@ -5840,47 +5850,47 @@ static isDetailsPage() {
 		const grid = container.querySelector('.jv-actor-grid');
 		const leftBtn = container.querySelector('.jv-scroll-left');
 		const rightBtn = container.querySelector('.jv-scroll-right');
-		
+
 		if (!scrollContainer || !grid || !leftBtn || !rightBtn) return;
-		
+
 		// 计算每次应该滚动的距离（一页显示的宽度）
 		const calculateScrollAmount = () => {
 			const cards = grid.querySelectorAll('.jv-similar-card');
 			if (cards.length === 0) return 400;
-			
+
 			const firstCard = cards[0];
 			const cardStyle = window.getComputedStyle(firstCard);
 			const cardWidth = firstCard.offsetWidth;
 			const marginRight = parseFloat(cardStyle.marginRight) || 0;
 			const cardWithMargin = cardWidth + marginRight;
-			
+
 			// 计算当前容器宽度内能显示几张卡片
 			const visibleCards = Math.floor(grid.clientWidth / cardWithMargin);
 			const scrollAmount = visibleCards * cardWithMargin;
-			
+
 			return Math.max(scrollAmount, cardWithMargin);
 		};
-		
+
 		const updateButtons = () => {
 			const scrollLeft = grid.scrollLeft;
 			const maxScroll = grid.scrollWidth - grid.clientWidth;
-			
+
 			leftBtn.style.display = scrollLeft > 0 ? 'flex' : 'none';
 			rightBtn.style.display = scrollLeft < maxScroll - 10 ? 'flex' : 'none';
 		};
-		
+
 		leftBtn.onclick = () => {
 			const scrollAmount = calculateScrollAmount();
 			grid.scrollBy({ left: -scrollAmount, behavior: 'smooth' });
 			setTimeout(updateButtons, 300);
 		};
-		
+
 		rightBtn.onclick = () => {
 			const scrollAmount = calculateScrollAmount();
 			grid.scrollBy({ left: scrollAmount, behavior: 'smooth' });
 			setTimeout(updateButtons, 300);
 		};
-		
+
 		grid.addEventListener('scroll', updateButtons);
 		updateButtons();
 	}
@@ -5888,34 +5898,34 @@ static isDetailsPage() {
 	static addHoverTrailerEffectForActor() {
 		// 如果是触摸设备，不添加悬停效果
 		if ('ontouchstart' in window) return;
-		
+
 		// 获取所有演员容器（包括 #jv-actor-container, #jv-actor-container-1, #jv-actor-container-2）
 		const actorContainers = document.querySelectorAll('[id^="jv-actor-container"]');
 		if (!actorContainers.length) return;
-		
+
 		actorContainers.forEach(actorContainer => {
 			const cards = actorContainer.querySelectorAll('.jv-similar-card');
-		
+
 			cards.forEach((card, index) => {
 				const imageContainer = card.querySelector('.jv-similar-card-image');
 				const hasTrailer = imageContainer && imageContainer.classList.contains('has-trailer');
-				
+
 				if (!imageContainer || !hasTrailer) return;
-				
+
 				const img = imageContainer.querySelector('img');
 				const overlay = imageContainer.querySelector('.jv-card-overlay');
 				const itemId = card.dataset.itemId;
-				
+
 				let isHovered = false;
 				let videoElement = null;
 				let expandBtn = null;
 				let currentTrailerUrl = null;
 				let debounceTimer = null; // 防抖定时器
-				
+
 				const onMouseEnter = () => {
 					isHovered = true;
 					img.style.filter = 'blur(5px)';
-					
+
 					// 使用防抖，延迟 400ms 再加载预告片
 					clearTimeout(debounceTimer);
 					debounceTimer = setTimeout(() => {
@@ -5924,19 +5934,19 @@ static isDetailsPage() {
 							console.log('[ExtraFanart] 防抖期间鼠标离开，取消加载预告片（演员作品）');
 							return;
 						}
-						
+
 						// 异步加载预告片
 						ExtraFanart.getTrailerUrlForHover(itemId).then(trailerUrl => {
 							if (!isHovered || !trailerUrl) {
 								console.log('[ExtraFanart] 预告片加载期间状态变化或无预告片（演员作品）');
 								return;
 							}
-							
+
 							currentTrailerUrl = trailerUrl;
-							
+
 							// 检查是否是 YouTube 链接
 							const isYouTube = ExtraFanart.isYouTubeUrl(trailerUrl);
-							
+
 							// 创建放大按钮
 							expandBtn = document.createElement('button');
 							expandBtn.className = 'jv-expand-btn';
@@ -5964,36 +5974,36 @@ static isDetailsPage() {
 								backdrop-filter: blur(4px);
 							`;
 							expandBtn.title = '全屏播放';
-							
+
 							expandBtn.onmouseenter = () => {
 								expandBtn.style.background = 'rgba(0, 0, 0, 0.8)';
 								expandBtn.style.transform = 'scale(1.1)';
 							};
-							
+
 							expandBtn.onmouseleave = () => {
 								expandBtn.style.background = 'rgba(0, 0, 0, 0.6)';
 								expandBtn.style.transform = 'scale(1)';
 							};
-							
+
 							expandBtn.onclick = (e) => {
 								e.stopPropagation();
 								console.log('[ExtraFanart] 放大按钮被点击（演员作品）', { trailerUrl: currentTrailerUrl, isYouTube });
 								// 打开全屏播放器
 								ExtraFanart.openVideoPlayer(currentTrailerUrl, isYouTube);
 							};
-							
+
 							// 将按钮添加到 imageContainer 而不是 overlay，避免层级问题
 							imageContainer.appendChild(expandBtn);
-							
+
 							// 延迟显示按钮
 							if (isHovered && expandBtn) {
 								expandBtn.style.opacity = '1';
 							}
-							
+
 							if (isYouTube) {
 								// 使用 iframe 播放 YouTube 视频
 								const embedUrl = ExtraFanart.convertYouTubeUrl(trailerUrl);
-								
+
 								if (embedUrl) {
 									videoElement = document.createElement('iframe');
 									videoElement.src = embedUrl;
@@ -6013,7 +6023,7 @@ static isDetailsPage() {
 										pointer-events: auto;
 									`;
 									overlay.appendChild(videoElement);
-									
+
 									if (isHovered) {
 										setTimeout(() => {
 											if (videoElement) {
@@ -6047,10 +6057,10 @@ static isDetailsPage() {
 									transition: opacity 0.3s ease;
 									z-index: 2;
 								`;
-								
+
 								// 监听音量变化，只在用户主动操作时记录
 								let userInteracted = false;
-								videoElement.addEventListener('volumechange', function() {
+								videoElement.addEventListener('volumechange', function () {
 									if (userInteracted) {
 										if (!this.muted && this.volume > 0) {
 											localStorage.setItem('jv-trailer-volume', this.volume);
@@ -6060,11 +6070,11 @@ static isDetailsPage() {
 										}
 									}
 								});
-								
+
 								// 标记用户交互
-								videoElement.addEventListener('click', function() { userInteracted = true; });
-								videoElement.addEventListener('mousedown', function() { userInteracted = true; });
-								
+								videoElement.addEventListener('click', function () { userInteracted = true; });
+								videoElement.addEventListener('mousedown', function () { userInteracted = true; });
+
 								// 延迟恢复用户设置，避免初始化时触发
 								setTimeout(() => {
 									if (videoElement) {
@@ -6077,9 +6087,9 @@ static isDetailsPage() {
 										userInteracted = true; // 设置完成后允许记录变化
 									}
 								}, 100);
-								
+
 								overlay.appendChild(videoElement);
-								
+
 								if (isHovered) {
 									setTimeout(() => {
 										if (videoElement) {
@@ -6091,28 +6101,28 @@ static isDetailsPage() {
 						});
 					}, 400); // 防抖延迟 400ms
 				};
-				
+
 				const onMouseLeave = () => {
 					isHovered = false;
-					
+
 					// 取消待处理的防抖操作
 					clearTimeout(debounceTimer);
-					
+
 					img.style.filter = '';
-					
+
 					if (videoElement) {
 						videoElement.remove();
 						videoElement = null;
 					}
-					
+
 					if (expandBtn && expandBtn.parentNode) {
 						expandBtn.parentNode.removeChild(expandBtn);
 						expandBtn = null;
 					}
-					
+
 					currentTrailerUrl = null;
 				};
-				
+
 				card.addEventListener('mouseenter', onMouseEnter);
 				card.addEventListener('mouseleave', onMouseLeave);
 			});
