@@ -13,12 +13,12 @@ class ExtraFanart {
 		this.enableJavdbReviews = true;
 
 		// 是否启用相似影片功能（true=启用，false=禁用）
-		this.enableSimilarItems = true;
+		this.enableSimilarItems = false;
 		// 相似影片最多显示数量
 		this.maxSimilarItems = 20;
 
 		// 是否启用演员其他作品功能（true=启用，false=禁用）
-		this.enableActorMoreItems = true;
+		this.enableActorMoreItems = false;
 		// 演员其他作品最多显示数量（每个演员）
 		this.maxActorMoreItems = 20;
 
@@ -120,7 +120,8 @@ class ExtraFanart {
 			subtree = true,
 			attributes = false,
 			childList = true,
-			characterData = false
+			characterData = false,
+			timeoutCallback = null  // 新增：超时时的回调
 		} = options;
 
 		// 在顶部显式声明 timeoutId，避免 ReferenceError
@@ -150,6 +151,8 @@ class ExtraFanart {
 		timeoutId = setTimeout(() => {
 			observer.disconnect();
 			console.log('[ExtraFanart] MutationObserver 超时:', targetSelector);
+			// 超时时执行回调（如兜底插入）
+			if (timeoutCallback) timeoutCallback();
 		}, timeout);
 
 		// 立即检查一次，如果元素已存在
@@ -919,9 +922,41 @@ class ExtraFanart {
 				},
 				{
 					parentSelector: detailPageParent === document.body ? 'body' : undefined,
-					timeout: 15000, // 15秒超时
+					timeout: 15000,
 					subtree: true,
-					childList: true
+					childList: true,
+					// 修复：无演员信息的番号 castCollapsible/peopleSection 永远不出现
+					// 超时后用更稳定的兜底锚点强制插入容器
+					timeoutCallback: () => {
+						if (!this.isDetailsPage()) return;
+						// 已经被插入则跳过
+						const detailPage = document.querySelector('#itemDetailPage:not(.hide), .itemView:not(.hide)');
+						if (detailPage && detailPage.contains(this.imageContainer)) return;
+
+						console.log('[ExtraFanart] 锚点等待超时，使用兜底锚点插入剧照容器');
+						const fallbackSelectors = [
+							'#itemDetailPage:not(.hide) .detailPagePrimaryContainer',
+							'.itemView:not(.hide) .detailPagePrimaryContainer',
+							'#itemDetailPage:not(.hide) .itemDetailPage-infoContainer',
+							'#itemDetailPage:not(.hide) .mainDetailButtons',
+							'#itemDetailPage:not(.hide) .detailRibbon',
+							'#itemDetailPage:not(.hide) .nameContainer',
+							'.itemView:not(.hide) .nameContainer',
+							'#itemDetailPage:not(.hide)',
+							'.itemView:not(.hide)',
+						];
+						let fallbackAnchor = null;
+						for (const sel of fallbackSelectors) {
+							fallbackAnchor = document.querySelector(sel);
+							if (fallbackAnchor) break;
+						}
+						if (fallbackAnchor) {
+							console.log('[ExtraFanart] 兜底锚点:', fallbackAnchor.className || fallbackAnchor.id);
+							this.insertContainerAfterAnchor(imageCount, fallbackAnchor);
+						} else {
+							console.log('[ExtraFanart] 兜底锚点也未找到，放弃插入');
+						}
+					}
 				}
 			);
 			return;
@@ -1083,11 +1118,12 @@ class ExtraFanart {
 			}
 
 			// 延迟恢复相似影片、演员作品和番号，确保剧照容器先稳定
-			setTimeout(() => {
+			// 修复：showContainer() 内部用 MutationObserver 异步插入容器，
+			// 原来 setTimeout(fn, 0) 立刻检查必然失败，改为轮询等待容器就绪
+			const waitAndRestore = (retryCount = 0) => {
 				// 再次检查 itemId，确保没有切换到其他页面
 				if (this.itemId !== currentItemId) return;
 
-				// 再次确认剧照容器在正确位置
 				const detailPageCheck = document.querySelector('#itemDetailPage:not(.hide), .itemView:not(.hide)');
 				const imageContainerReady = this.imageContainer &&
 					detailPageCheck &&
@@ -1095,7 +1131,12 @@ class ExtraFanart {
 					this.imageContainer.style.display === 'block';
 
 				if (!imageContainerReady) {
-					console.log('[ExtraFanart] 剧照容器未就绪，取消恢复其他容器');
+					// 最多等待 16 秒（每 500ms 重试一次，共 32 次）
+					if (retryCount < 32) {
+						setTimeout(() => waitAndRestore(retryCount + 1), 500);
+					} else {
+						console.log('[ExtraFanart] 剧照容器等待超时，取消恢复其他容器');
+					}
 					return;
 				}
 
@@ -1190,7 +1231,7 @@ class ExtraFanart {
 						}
 					}
 				}
-			}, 150);
+			}; waitAndRestore();
 
 			return;
 		} this.isLoading = true;
@@ -1967,6 +2008,15 @@ class ExtraFanart {
 			}
 		}
 
+		// 点击卡片跳转到对应详情页（与演员作品卡片逻辑一致）
+		card.onclick = () => {
+			if (typeof Emby !== 'undefined' && Emby.Page && Emby.Page.showItem) {
+				Emby.Page.showItem(item.Id);
+			} else {
+				window.location.hash = `#!/item?id=${item.Id}`;
+			}
+		};
+
 		return card;
 	}
 
@@ -2638,20 +2688,11 @@ class ExtraFanart {
 		});
 
 		webLinks.push({
-			title: '搜索 supjav.com',
-			url: `https://supjav.com/zh/?s=${code}`,
+			title: '搜索 javlibrary.com',
+			url: `https://www.javlibrary.com/cn/vl_searchbyid.php?keyword=${code}`,
 			color: 'rgb(191, 96, 166)',
-			site: 'supjav'
+			site: 'javlibrary'
 		});
-
-		webLinks.push({
-			title: '搜索 98tang',
-			url: `https://www.sehuatang.net/search.php?mod=forum&srchtype=title&srhfid=&srhlocality=forum::index&srchtxt=${code}`,
-			color: 'rgb(191, 96, 166)',
-			site: '98tang'
-		});
-
-
 
 		// 根据类型添加特定链接
 		if (isUncensored) {
@@ -6141,3 +6182,427 @@ if (typeof ApiClient !== 'undefined') {
 		}
 	});
 }
+
+/**
+ * extrafanart-enhancements-addon.js
+ * ----------------------------------------------------------------------------
+ * 一个 drop-in 增强插件，运行时包裹 extrafanart&trailers.js 里的 ExtraFanart，
+ * 不改动原文件结构。包含两组功能：
+ *
+ * 【A. 预告片：取址 + 收藏 + 复用】
+ *   1. 用你自己的 API（默认 https://javapi.tocc.cc）取预告片，来源比 Emby 自带
+ *      的 RemoteTrailers 更全；命中失败再回退原有 RemoteTrailers。
+ *   2. 全屏播放预告片时，后台整段下载并保存成 番号.mp4（“收藏”）。
+ *   3. 再次浏览同一番号优先播放本地 番号.mp4（“复用”），秒开、离线可用。
+ *
+ * 【B. 路径：读取 + 显示 + 复制】（移植自 emby_asis.js）
+ *   在 extrafanart 的链接区下方显示该影片的文件夹路径，点击可复制目录路径，
+ *   另有“完整路径”按钮复制带文件名的完整路径。
+ *
+ * 部署：把本文件接在 extrafanart&trailers.js 之后加载即可。由于它只“追加并
+ *      包裹”，不与原文件的任何行冲突，最简单的做法是直接把本文件内容粘到你
+ *      私有 fork 的 extrafanart&trailers.js 末尾（自动启动那段之后）。这样既
+ *      “进了 fork”，又不会和你填的个人信息产生合并冲突。
+ *
+ * 前提（影响“收藏”功能，务必先看）：
+ *   - 目录保存依赖 File System Access API，要求安全上下文：
+ *     http://localhost:8096 / http://127.0.0.1:8096 可用；局域网 IP 访问不可用，
+ *     需改用 localhost 或给 Emby 上 https。
+ *   - “收藏”需 fetch 把 mp4 读成 blob，要求媒体地址带 CORS 头：请在 API 端开启
+ *     proxyTrailers，让返回的是 /media 代理地址（已带 Access-Control-Allow-Origin:*）。
+ *   - 目录授权按 origin 隔离：localhost:8096 需单独点一次“选择缓存目录”；指向
+ *     Jav_trailer_Direct 用过的同一文件夹，可共享标准厂牌番号（ABC-123）的 mp4。
+ * ----------------------------------------------------------------------------
+ */
+(function () {
+	'use strict';
+
+	// ===================== 可配置项 =====================
+	const API_BASE = String(window.JAVP_API_BASE || 'https://javapi.tocc.cc').replace(/\/+$/, '');
+	const ENABLE_API = window.JAVP_ENABLE_API !== false;
+
+	const LS_DISK_ENABLED = 'javp_emby_disk_enabled_v1';
+	const LS_API_CACHE = 'javp_emby_api_cache_v1';
+	const API_CACHE_TTL = 7 * 24 * 3600 * 1000;
+	const API_CACHE_MAX = 400;
+
+	const DISK_DB_NAME = 'javp_emby_disk_cache_db_v1';
+	const DISK_STORE = 'handles';
+	const DISK_DIR_KEY = 'trailerCacheDir';
+
+	const urlCodeMap = new Map();
+
+	// ===================== 番号归一化（与 API 端 normalize.ts 保持一致）=====================
+	function normalizeCode(raw) {
+		let code = String(raw || '').trim().toUpperCase();
+		code = code.replace(/\s+/g, '-');
+		const fc2 = code.match(/FC2(?:[-_\s]*PPV)?[-_\s]*(\d{5,10})/i);
+		if (fc2 && fc2[1]) return 'FC2-' + fc2[1];
+		const heyzo = code.match(/HEYZO[-_\s]*(\d{2,6})/i);
+		if (heyzo && heyzo[1]) return 'HEYZO-' + heyzo[1];
+		const dateCode = code.match(/(\d{6})[-_](\d{2,3})/);
+		if (dateCode && dateCode[1] && dateCode[2]) return dateCode[1] + '_' + dateCode[2];
+		if (/^[0-9_-]+$/.test(code)) return code;
+		const m = code.match(/^([A-Z]{2,15})[-_]?(\d{2,9})$/);
+		if (m && m[1] && m[2]) return m[1] + '-' + m[2];
+		return code;
+	}
+
+	// ===================== 路径处理（移植自 emby_asis.js）=====================
+	function processPath(path) {
+		if (!path) return '';
+		try {
+			let folder = String(path).replace(/[^\\\/]*$/, ''); // 去掉最后一个斜杠后的文件名
+			if (folder.endsWith('\\') || folder.endsWith('/')) folder = folder.slice(0, -1);
+			return folder;
+		} catch (e) { return String(path); }
+	}
+
+	// ===================== 本地保存开关 =====================
+	function isDiskEnabled() { try { return localStorage.getItem(LS_DISK_ENABLED) !== '0'; } catch (e) { return true; } }
+	function setDiskEnabled(v) { try { localStorage.setItem(LS_DISK_ENABLED, v ? '1' : '0'); } catch (e) { } }
+
+	// ===================== API 地址缓存（localStorage）=====================
+	function readApiCacheAll() {
+		try { const raw = localStorage.getItem(LS_API_CACHE); const o = raw ? JSON.parse(raw) : {}; return o && typeof o === 'object' ? o : {}; }
+		catch (e) { return {}; }
+	}
+	function writeApiCacheAll(o) { try { localStorage.setItem(LS_API_CACHE, JSON.stringify(o || {})); } catch (e) { } }
+	function getApiCache(code) {
+		const all = readApiCacheAll(); const hit = all[code];
+		if (!hit || !hit.ts) return null;
+		if (Date.now() - hit.ts > API_CACHE_TTL) { delete all[code]; writeApiCacheAll(all); return null; }
+		return hit.data || null;
+	}
+	function setApiCache(code, data) {
+		const all = readApiCacheAll(); all[code] = { ts: Date.now(), data };
+		const keys = Object.keys(all);
+		if (keys.length > API_CACHE_MAX) keys.sort((a, b) => (all[a].ts || 0) - (all[b].ts || 0)).slice(0, keys.length - API_CACHE_MAX).forEach(k => delete all[k]);
+		writeApiCacheAll(all);
+	}
+	function clearApiCache() { writeApiCacheAll({}); }
+
+	// ===================== 磁盘目录缓存（File System Access API）=====================
+	const DiskCache = {
+		supported() {
+			return typeof window.showDirectoryPicker === 'function' &&
+				typeof window.indexedDB !== 'undefined' && window.isSecureContext === true;
+		},
+		openDb() {
+			return new Promise((resolve, reject) => {
+				const req = indexedDB.open(DISK_DB_NAME, 1);
+				req.onupgradeneeded = () => { const db = req.result; if (!db.objectStoreNames.contains(DISK_STORE)) db.createObjectStore(DISK_STORE); };
+				req.onsuccess = () => resolve(req.result);
+				req.onerror = () => reject(req.error || new Error('indexedDB open failed'));
+			});
+		},
+		idb(mode, fn) {
+			return this.openDb().then(db => new Promise((resolve, reject) => {
+				const tx = db.transaction(DISK_STORE, mode); const store = tx.objectStore(DISK_STORE); let out;
+				Promise.resolve(fn(store)).then(v => { out = v; }).catch(reject);
+				tx.oncomplete = () => { try { db.close(); } catch (e) { } resolve(out); };
+				tx.onerror = () => { try { db.close(); } catch (e) { } reject(tx.error); };
+				tx.onabort = () => { try { db.close(); } catch (e) { } reject(tx.error); };
+			}));
+		},
+		getHandle() {
+			if (!this.supported()) return Promise.resolve(null);
+			return this.idb('readonly', store => new Promise((res, rej) => {
+				const r = store.get(DISK_DIR_KEY); r.onsuccess = () => res(r.result || null); r.onerror = () => rej(r.error);
+			})).catch(() => null);
+		},
+		setHandle(handle) { return this.idb('readwrite', store => store.put(handle, DISK_DIR_KEY)); },
+		clearHandle() { if (!this.supported()) return Promise.resolve(); return this.idb('readwrite', store => store.delete(DISK_DIR_KEY)).catch(() => { }); },
+		async ensurePermission(handle, mode, request) {
+			if (!handle) return false;
+			const opts = { mode: mode || 'read' };
+			try {
+				if (typeof handle.queryPermission === 'function') { if (await handle.queryPermission(opts) === 'granted') return true; }
+				if (request && typeof handle.requestPermission === 'function') return (await handle.requestPermission(opts)) === 'granted';
+				return typeof handle.queryPermission !== 'function' && typeof handle.requestPermission !== 'function';
+			} catch (e) { return false; }
+		},
+		async getUsableDir(mode, request) {
+			const handle = await this.getHandle();
+			if (!handle) return null;
+			return (await this.ensurePermission(handle, mode || 'read', Boolean(request))) ? handle : null;
+		},
+		async hasHandle() { try { return Boolean(await this.getHandle()); } catch (e) { return false; } },
+		async getDirName() { try { const h = await this.getHandle(); return h && h.name ? String(h.name) : ''; } catch (e) { return ''; } },
+		async canRead() { try { return Boolean(await this.getUsableDir('read', false)); } catch (e) { return false; } },
+		async canWrite() { try { return Boolean(await this.getUsableDir('readwrite', false)); } catch (e) { return false; } },
+		async chooseDirectory() {
+			if (!this.supported()) throw new Error('当前环境不支持目录选择（需 Chrome/Edge，且通过 localhost 或 https 访问）。');
+			const dir = await window.showDirectoryPicker({ id: 'javp-emby-trailer-cache', mode: 'readwrite' });
+			if (!await this.ensurePermission(dir, 'readwrite', true)) throw new Error('未获得目录读写权限。');
+			await this.setHandle(dir);
+			return dir;
+		},
+		sanitizeName(value) {
+			const s = String(value || 'UNKNOWN').trim().toUpperCase().replace(/[<>:"/\\|?*\x00-\x1F]/g, '_').replace(/[.\s]+$/g, '').slice(0, 120);
+			return s || 'UNKNOWN';
+		},
+		fileNameForCode(code) { return this.sanitizeName(code) + '.mp4'; },
+		isHlsUrl(url, blob) { const u = String(url || ''); const t = String(blob && blob.type || '').toLowerCase(); return /\.m3u8(?:$|[?#])/i.test(u) || /mpegurl|x-mpegurl/i.test(t); },
+		isDirectVideoFile(url, blob) {
+			const u = String(url || ''); const t = String(blob && blob.type || '').toLowerCase();
+			if (this.isHlsUrl(u, blob)) return false;
+			if (/^video\//i.test(t)) return true;
+			return /\.(mp4|m4v|mov|webm)(?:$|[?#])/i.test(u);
+		},
+		async hasCachedFile(code) {
+			try { const dir = await this.getUsableDir('read', false); if (!dir) return false; const fh = await dir.getFileHandle(this.fileNameForCode(code)); const f = await fh.getFile(); return Boolean(f && f.size); }
+			catch (e) { return false; }
+		},
+		async getCachedObjectUrl(code) {
+			try {
+				const dir = await this.getUsableDir('read', false); if (!dir) return null;
+				const fileName = this.fileNameForCode(code); const fh = await dir.getFileHandle(fileName); const f = await fh.getFile();
+				if (!f || !f.size) return null;
+				return { fileName, size: f.size, objectUrl: URL.createObjectURL(f) };
+			} catch (e) { return null; }
+		},
+		async saveBlob(code, url, blob) {
+			if (!code || !blob) return { saved: false, reason: 'empty' };
+			if (!this.isDirectVideoFile(url, blob)) return { saved: false, reason: 'not-direct-video' };
+			const dir = await this.getUsableDir('readwrite', false);
+			if (!dir) return { saved: false, reason: 'no-directory' };
+			const fileName = this.fileNameForCode(code);
+			try { const eh = await dir.getFileHandle(fileName); const ef = await eh.getFile(); if (ef && ef.size) return { saved: false, reason: 'exists', fileName, size: ef.size }; } catch (e) { }
+			const fh = await dir.getFileHandle(fileName, { create: true });
+			const writable = await fh.createWritable();
+			try { await writable.write(blob); } finally { await writable.close(); }
+			return { saved: true, fileName, size: blob.size };
+		}
+	};
+
+	// ===================== 路径小按钮工厂 =====================
+	function mkPathBtn(text, onClick) {
+		const b = document.createElement('button');
+		b.textContent = text;
+		b.className = 'jv-web-link'; // 复用 extrafanart 链接按钮样式
+		b.style.cssText = 'flex:0 0 auto;cursor:pointer;background:transparent;color:#81c784;border-color:#81c784;';
+		b.onclick = e => { e.preventDefault(); e.stopPropagation(); onClick(); };
+		return b;
+	}
+
+	// ===================== 给 ExtraFanart 打补丁 =====================
+	function patch(EF) {
+		if (EF.__javpPatched) return;
+		EF.__javpPatched = true;
+
+		// ---------- A. 预告片 ----------
+		function rememberUrls(result) {
+			if (!result || !result.code) return;
+			if (result.trailer) urlCodeMap.set(result.trailer, result.code);
+			Object.values(result.qualities || {}).forEach(u => { if (u) urlCodeMap.set(String(u), result.code); });
+			if (urlCodeMap.size > 1200) [...urlCodeMap.keys()].slice(0, 600).forEach(k => urlCodeMap.delete(k));
+		}
+
+		EF.fetchApiTrailer = async function (rawCode) {
+			const code = normalizeCode(rawCode);
+			if (!code || !ENABLE_API) return null;
+			const cached = getApiCache(code);
+			if (cached) { rememberUrls(cached); return cached; }
+			try {
+				const url = API_BASE + '/trailers/' + encodeURIComponent(code);
+				const resp = await fetch(url, { method: 'GET', mode: 'cors', credentials: 'omit' });
+				if (!resp.ok) return null;
+				const data = await resp.json();
+				const trailer = String(data && data.trailer || '');
+				if (!/^https?:\/\//i.test(trailer)) return null;
+				const result = { code: normalizeCode(data.code || code), trailer, qualities: data.qualities || {}, resolutions: data.resolutions || {}, source: data.source || '' };
+				rememberUrls(result); setApiCache(code, result); return result;
+			} catch (e) { console.warn('[ExtraFanart][javp] API 预告片获取失败:', e); return null; }
+		};
+
+		const _getTrailerUrl = EF.getTrailerUrl;
+		EF.getTrailerUrl = async function (itemId, itemDetails) {
+			const details = itemDetails || await this.getItemDetails(itemId);
+			const code0 = details ? normalizeCode(this.extractCodeFromTitle(details.Name)) : '';
+			this.trailerCode = code0 || null;
+			if (code0 && isDiskEnabled() && await DiskCache.hasCachedFile(code0)) return 'javp-local://' + encodeURIComponent(code0);
+			if (code0 && ENABLE_API) { const api = await EF.fetchApiTrailer(code0); if (api && api.trailer) { this.trailerCode = api.code; return api.trailer; } }
+			return await _getTrailerUrl.call(this, itemId, details);
+		};
+
+		const _getHover = EF.getTrailerUrlForHover;
+		EF.getTrailerUrlForHover = async function (itemId) {
+			if (ENABLE_API && typeof ApiClient !== 'undefined') {
+				try {
+					const item = await ApiClient.getItem(ApiClient.getCurrentUserId(), itemId);
+					const code = item ? normalizeCode(this.extractCodeFromTitle(item.Name)) : '';
+					if (code) { const api = await EF.fetchApiTrailer(code); if (api && api.trailer) return api.trailer; }
+				} catch (e) { }
+			}
+			return await _getHover.call(this, itemId);
+		};
+
+		const _preload = EF.preloadTrailer;
+		EF.preloadTrailer = function () {
+			if (this.trailerUrl && !/^https?:\/\//i.test(this.trailerUrl)) { this.trailerPreloaded = true; return; }
+			return _preload.call(this);
+		};
+
+		const _open = EF.openVideoPlayer;
+		EF.openVideoPlayer = async function (trailerUrl, isYouTube) {
+			if (typeof trailerUrl === 'string' && trailerUrl.indexOf('javp-local://') === 0) {
+				const code = decodeURIComponent(trailerUrl.slice('javp-local://'.length));
+				const local = await DiskCache.getCachedObjectUrl(code);
+				if (local && local.objectUrl) { this.__javpRevoke && this.__javpRevoke(); this.__javpLocalObjUrl = local.objectUrl; return await _open.call(this, local.objectUrl, false); }
+				const api = this.trailerCode ? await EF.fetchApiTrailer(this.trailerCode) : null;
+				if (api && api.trailer) return await _open.call(this, api.trailer, false);
+				this.showToast && this.showToast('本地预告片不可用'); return;
+			}
+			const ret = await _open.call(this, trailerUrl, isYouTube);
+			if (!isYouTube && /^https?:\/\//i.test(String(trailerUrl)) && isDiskEnabled()) {
+				const code = urlCodeMap.get(String(trailerUrl));
+				if (code) EF.collectTrailer(code, String(trailerUrl));
+			}
+			return ret;
+		};
+
+		const _close = EF.closeVideoPlayer;
+		EF.closeVideoPlayer = async function () { const r = await _close.call(this); this.__javpRevoke && this.__javpRevoke(); return r; };
+		EF.__javpRevoke = function () { if (this.__javpLocalObjUrl) { try { URL.revokeObjectURL(this.__javpLocalObjUrl); } catch (e) { } this.__javpLocalObjUrl = null; } };
+
+		EF.__javpCollecting = new Set();
+		EF.collectTrailer = async function (code, url) {
+			if (!code || !url || !isDiskEnabled()) return;
+			if (DiskCache.isHlsUrl(url)) return;
+			if (this.__javpCollecting.has(code)) return;
+			try {
+				if (!(await DiskCache.canWrite())) return;
+				if (await DiskCache.hasCachedFile(code)) return;
+				this.__javpCollecting.add(code);
+				const resp = await fetch(url, { mode: 'cors', credentials: 'omit' });
+				if (!resp.ok) throw new Error('HTTP ' + resp.status);
+				const blob = await resp.blob();
+				const r = await DiskCache.saveBlob(code, url, blob);
+				if (r && r.saved) this.showToast && this.showToast('已收藏预告片：' + r.fileName);
+			} catch (e) { console.warn('[ExtraFanart][javp] 预告片收集失败（多为跨域未代理或网络问题）:', e); }
+			finally { this.__javpCollecting.delete(code); }
+		};
+
+		// ---------- B. 路径读取 / 显示 / 复制 ----------
+		EF.__javpAddPathChip = function (titleElement) {
+			const detailPage = document.querySelector('#itemDetailPage:not(.hide), .itemView:not(.hide)');
+			const container = detailPage ? detailPage.querySelector('.jv-web-links-container') : null;
+			if (!container) return;                              // 没有链接容器（通常因未检测到番号），跳过
+			if (container.querySelector('.javp-path-chip')) return; // 幂等：已加过
+
+			const fullPath = this.itemDetails && this.itemDetails.Path ? String(this.itemDetails.Path) : '';
+			if (!fullPath) return;
+			const folderPath = processPath(fullPath) || fullPath;
+
+			const wrap = document.createElement('div');
+			wrap.className = 'javp-path-chip';
+			wrap.style.cssText = 'flex-basis:100%;display:flex;align-items:center;gap:8px;margin-top:6px;font-size:12px;color:#cbd5e1;min-width:0;';
+
+			const icon = document.createElement('span');
+			icon.textContent = '📁'; icon.style.flex = '0 0 auto';
+
+			const pathText = document.createElement('span');
+			pathText.textContent = folderPath;
+			pathText.title = fullPath;
+			pathText.style.cssText = 'flex:1 1 auto;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;color:#81c784;cursor:pointer;text-decoration:underline;';
+			pathText.onclick = () => { this.copyToClipboard(folderPath); this.showToast && this.showToast('已复制目录路径'); };
+
+			const copyDir = mkPathBtn('复制目录', () => { this.copyToClipboard(folderPath); this.showToast && this.showToast('已复制目录路径'); });
+			const copyFull = mkPathBtn('完整路径', () => { this.copyToClipboard(fullPath); this.showToast && this.showToast('已复制完整路径'); });
+
+			wrap.appendChild(icon); wrap.appendChild(pathText); wrap.appendChild(copyDir); wrap.appendChild(copyFull);
+			container.appendChild(wrap);
+		};
+
+		const _insertWebLinks = EF.insertWebLinks;
+		EF.insertWebLinks = function (titleElement, webLinks) {
+			const ret = _insertWebLinks.call(this, titleElement, webLinks);
+			try { EF.__javpAddPathChip.call(this, titleElement); } catch (e) { console.warn('[ExtraFanart][javp] 路径显示失败:', e); }
+			return ret;
+		};
+
+		console.log('[ExtraFanart][javp] 增强补丁已加载（预告片缓存 + 路径复制），API:', API_BASE);
+	}
+
+	// ===================== 设置按钮 + 简易面板 =====================
+	function mountSettings() {
+		if (document.getElementById('javp-emby-settings-btn')) return;
+		const btn = document.createElement('button');
+		btn.id = 'javp-emby-settings-btn';
+		btn.title = '预告片缓存设置';
+		btn.textContent = '🎬';
+		btn.style.cssText = ['position:fixed', 'right:16px', 'bottom:16px', 'z-index:2147483000', 'width:44px', 'height:44px', 'border-radius:999px', 'border:none', 'background:#00a4dc', 'color:#fff', 'font-size:20px', 'cursor:pointer', 'box-shadow:0 6px 18px rgba(0,0,0,.35)'].join(';');
+		document.body.appendChild(btn);
+		btn.onclick = openPanel;
+	}
+
+	function openPanel() {
+		const old = document.getElementById('javp-emby-settings-panel');
+		if (old) { old.remove(); return; }
+		const esc = s => String(s || '').replace(/[&<>"']/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
+
+		const wrap = document.createElement('div');
+		wrap.id = 'javp-emby-settings-panel';
+		wrap.style.cssText = 'position:fixed;inset:0;z-index:2147483001;background:rgba(0,0,0,.5);display:flex;align-items:center;justify-content:center;padding:18px;';
+		wrap.innerHTML =
+			'<div style="width:min(560px,96vw);max-height:88vh;overflow:auto;background:#1a1a1a;color:#eee;border-radius:14px;border:1px solid rgba(255,255,255,.1);font:13px/1.6 -apple-system,BlinkMacSystemFont,\'Segoe UI\',Roboto,Arial,sans-serif;">' +
+			'  <div style="display:flex;justify-content:space-between;align-items:center;padding:14px 16px;border-bottom:1px solid rgba(255,255,255,.1);background:rgba(0,164,220,.12);">' +
+			'    <b style="font-size:16px;">预告片缓存设置</b>' +
+			'    <button data-act="close" style="border:0;background:rgba(255,255,255,.12);color:#fff;border-radius:8px;padding:6px 12px;cursor:pointer;">关闭</button>' +
+			'  </div>' +
+			'  <div style="padding:16px;">' +
+			'    <div data-role="status" style="margin-bottom:12px;color:#bbb;">检测中…</div>' +
+			'    <div style="display:flex;flex-wrap:wrap;gap:8px;">' +
+			'      <button data-act="choose" style="border:0;background:#14b8a6;color:#fff;font-weight:700;border-radius:999px;padding:8px 14px;cursor:pointer;">选择/重选缓存目录</button>' +
+			'      <button data-act="toggle" style="border:0;background:#0f766e;color:#fff;font-weight:700;border-radius:999px;padding:8px 14px;cursor:pointer;">切换本地保存</button>' +
+			'      <button data-act="forget" style="border:1px solid #555;background:transparent;color:#ccc;border-radius:999px;padding:7px 12px;cursor:pointer;">取消目录授权</button>' +
+			'      <button data-act="clear" style="border:1px solid #7f1d1d;background:transparent;color:#f87171;border-radius:999px;padding:7px 12px;cursor:pointer;">清空地址缓存</button>' +
+			'    </div>' +
+			'    <div data-role="msg" style="margin-top:12px;padding:10px 12px;border-radius:10px;background:rgba(255,255,255,.06);color:#cbd5e1;"></div>' +
+			'    <div style="margin-top:12px;color:#94a3b8;font-size:12px;">提示：保存需通过 localhost 或 https 访问 Emby，并在 API 端开启 proxyTrailers。目录授权仅本站点有效，可指向 Jav_trailer_Direct 用过的同一文件夹以共享标准番号文件。</div>' +
+			'  </div>' +
+			'</div>';
+		document.body.appendChild(wrap);
+
+		const statusEl = wrap.querySelector('[data-role="status"]');
+		const msgEl = wrap.querySelector('[data-role="msg"]');
+		const setMsg = t => { if (msgEl) msgEl.textContent = t || ''; };
+
+		async function refresh() {
+			if (!statusEl) return;
+			if (!DiskCache.supported()) { statusEl.innerHTML = '<span style="color:#f87171;">当前环境不支持目录保存：需 Chrome/Edge，且通过 localhost 或 https 访问。</span>'; return; }
+			const enabled = isDiskEnabled(); const name = await DiskCache.getDirName(); const w = await DiskCache.canWrite();
+			statusEl.innerHTML = '本地保存：<b style="color:' + (enabled ? '#34d399' : '#f87171') + ';">' + (enabled ? '已启用' : '已关闭') + '</b>　|　授权目录：<b>' + (name ? esc(name) + (w ? '（可读写）' : '（权限未授予）') : '未选择') + '</b>';
+		}
+
+		wrap.addEventListener('click', async e => {
+			const t = e.target && e.target.closest('[data-act]');
+			if (!t && e.target === wrap) { wrap.remove(); return; }
+			if (!t) return;
+			const act = t.getAttribute('data-act');
+			if (act === 'close') { wrap.remove(); return; }
+			if (act === 'choose') {
+				try { const p = DiskCache.chooseDirectory(); setMsg('正在打开目录选择器…'); await p; setDiskEnabled(true); const name = await DiskCache.getDirName(); setMsg('目录已授权' + (name ? '：' + name : '') + '。之后观看预告片会自动收藏为 番号.mp4。'); }
+				catch (err) { setMsg('选择目录失败：' + (err && err.message ? err.message : err)); }
+				await refresh(); return;
+			}
+			if (act === 'toggle') { const next = !isDiskEnabled(); setDiskEnabled(next); setMsg(next ? '本地保存已启用。' : '本地保存已关闭。'); await refresh(); return; }
+			if (act === 'forget') { await DiskCache.clearHandle(); setMsg('已取消本站点目录授权（不会删除已保存的 mp4）。'); await refresh(); return; }
+			if (act === 'clear') { clearApiCache(); setMsg('已清空 API 预告片地址缓存（本地 mp4 不受影响）。'); return; }
+		}, true);
+
+		refresh();
+	}
+
+	// ===================== 等待 ExtraFanart 就绪后挂载 =====================
+	let tries = 0;
+	(function wait() {
+		if (typeof ExtraFanart !== 'undefined') {
+			try { patch(ExtraFanart); } catch (e) { console.warn('[ExtraFanart][javp] 打补丁失败:', e); }
+			try { if (document.body) mountSettings(); else document.addEventListener('DOMContentLoaded', mountSettings); } catch (e) { }
+			return;
+		}
+		if (tries++ < 150) setTimeout(wait, 200);
+	})();
+})();
