@@ -21,6 +21,17 @@
 
 媒体详情页的全方位增强：剧照展示、预告片播放、相似影片推荐、演员作品展示、JavDB短评等。
 
+> **⚠️ 请按 Emby 版本选择文件（二选一）**
+>
+> | Emby 版本 | 使用文件 |
+> |---|---|
+> | **4.10.x 及以上** | `extrafanart&trailers-4.10.js` |
+> | 4.9.x 及以下 | `extrafanart&trailers.js` |
+>
+> Emby 4.10 重写了前端页面生命周期：切换影片时**旧详情页不再从 DOM 移除，只被设为 `display:none`**。原版脚本依赖 `:not(.hide)` 判断当前页，在 4.10 下会命中已隐藏的旧页面，导致剧照 / 相似影片 / 演员作品 / 番号被注入到看不见的页面，表现为「详情页内容加载不出来」。
+>
+> `extrafanart&trailers-4.10.js` 为 4.10 适配版：修复了上述问题（可见页面解析、容器自动搬运、加载调度去重、ESC 不再误退出页面、预告片失效提示等），原版 `extrafanart&trailers.js` 保持原样不变。详细修复清单见文件头部注释。
+
 **核心功能：**
 - 🖼️ **剧照展示**：自动加载所有剧照，点击放大查看，支持键盘/滚轮切换
 - 🎬 **预告片播放**：支持本地视频和 YouTube，智能预加载
@@ -129,7 +140,8 @@
 Emby.CustomCssJS 管理界面
 ├── 自定义 JavaScript（粘贴 *.js 文件）
 │   ├── HomeSwiper.js
-│   ├── extrafanart&trailers.js
+│   ├── extrafanart&trailers.js        （Emby ≤ 4.9 使用）
+│   ├── extrafanart&trailers-4.10.js   （Emby ≥ 4.10 使用，与上一个二选一）
 │   ├── DefaultMuteVolume.js
 │   └── RememberPlaybackSpeed.js
 └── 自定义 CSS（粘贴 *.css 文件）
@@ -439,6 +451,8 @@ transition: transform 0.25s cubic-bezier(0.175, 0.885, 0.32, 1.275), ...
 ## 🔧 兼容性
 
 - ✅ Emby 服务器 4.x
+  - Emby **4.10.x 及以上**：请使用 `extrafanart&trailers-4.10.js`
+  - Emby **4.9.x 及以下**：请使用 `extrafanart&trailers.js`
 - ✅ 现代浏览器（Chrome, Firefox, Edge, Safari）
 - ✅ Emby 桌面客户端
 - ✅ 移动端浏览器
